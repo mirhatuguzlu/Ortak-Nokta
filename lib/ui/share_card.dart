@@ -1,0 +1,181 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../config.dart';
+import '../engine/meeting_engine.dart';
+import '../models.dart';
+import '../services/planner.dart';
+
+String mapsLink(Plan plan) =>
+    'https://www.google.com/maps/search/?api=1&query=${plan.result.point.latitude.toStringAsFixed(6)},'
+    '${plan.result.point.longitude.toStringAsFixed(6)}';
+
+String shareText(Plan plan, List<Participant> people, DateTime arrival) {
+  final leave = departures(arrival, plan.result.legs);
+  return [
+    '📍 ${plan.label} · ${formatClock(arrival)}',
+    for (var i = 0; i < people.length; i++)
+      '${people[i].name}: ${formatDuration(plan.result.legs[i].seconds)} (çıkış ${formatClock(leave[i])})',
+    mapsLink(plan),
+    'Ortak Nokta ile adil buluşma noktası bulundu${siteUrl.isEmpty ? '' : ': $siteUrl'}',
+  ].join('\n');
+}
+
+/// Önizlemeyi gösterir; "Paylaş" kartı görsel + metin olarak paylaşır.
+Future<void> showShareSheet(BuildContext context, Plan plan, List<Participant> people, DateTime arrival) {
+  final boundary = GlobalKey();
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Gruba gönder', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          Flexible(
+            child: FittedBox(
+              child: RepaintBoundary(key: boundary, child: ShareCard(plan: plan, people: people, arrival: arrival)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            icon: const Icon(Icons.ios_share),
+            label: const Text('Görsel olarak paylaş'),
+            onPressed: () async {
+              final text = shareText(plan, people, arrival);
+              try {
+                final obj = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+                final image = await obj.toImage(pixelRatio: 3);
+                final png = await image.toByteData(format: ui.ImageByteFormat.png);
+                await SharePlus.instance.share(ShareParams(
+                  text: text,
+                  files: [XFile.fromData(png!.buffer.asUint8List(), mimeType: 'image/png', name: 'ortak-nokta.png')],
+                ));
+              } catch (_) {
+                // Görsel üretilemezse (eski cihaz, web) en azından metin gitsin.
+                await SharePlus.instance.share(ShareParams(text: text));
+              }
+            },
+          ),
+          TextButton(
+            onPressed: () => SharePlus.instance.share(ShareParams(text: shareText(plan, people, arrival))),
+            child: const Text('Yalnızca metin gönder'),
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
+/// WhatsApp grubuna / hikâyeye giden kart. Sabit boyut: her cihazda aynı görünür.
+class ShareCard extends StatelessWidget {
+  const ShareCard({super.key, required this.plan, required this.people, required this.arrival});
+  final Plan plan;
+  final List<Participant> people;
+  final DateTime arrival;
+
+  @override
+  Widget build(BuildContext context) {
+    final legs = plan.result.legs;
+    final leave = departures(arrival, legs);
+    final longest = plan.result.maxSeconds;
+    const ink = Color(0xFF0B1F1A), muted = Color(0xFF5B6B66);
+    return SizedBox(
+      width: 360,
+      height: 450,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0E7C66), Color(0xFF075446)],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Row(children: [
+              Icon(Icons.join_inner, color: Colors.white, size: 22),
+              SizedBox(width: 8),
+              Text('Ortak Nokta',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.2)),
+            ]),
+            const SizedBox(height: 16),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Text('BULUŞMA · ${formatClock(arrival)}',
+                        style: const TextStyle(color: Color(0xFF0E7C66), fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                    const SizedBox(height: 6),
+                    Text(plan.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: ink, fontSize: 20, fontWeight: FontWeight.w800, height: 1.2)),
+                    const Spacer(),
+                    for (var i = 0; i < people.length; i++) ...[
+                      Row(children: [
+                        CircleAvatar(
+                            radius: 11,
+                            backgroundColor: people[i].color,
+                            child: Icon(people[i].mode.icon, size: 13, color: Colors.white)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(people[i].name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                        Text('çıkış ${formatClock(leave[i])}  ', style: const TextStyle(color: muted, fontSize: 11)),
+                        Text(formatDuration(legs[i].seconds),
+                            style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
+                      ]),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: longest == 0 ? 1 : (legs[i].seconds / longest).clamp(0.04, 1),
+                          minHeight: 5,
+                          color: people[i].color,
+                          backgroundColor: const Color(0xFFE6EFEC),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    const Spacer(),
+                    Row(children: [
+                      const Icon(Icons.balance, size: 16, color: Color(0xFF0E7C66)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          plan.result.gapSeconds < 60
+                              ? 'Herkes neredeyse aynı sürede varıyor'
+                              : 'En hızlı ile en yavaş arası ${formatDuration(plan.result.gapSeconds)}',
+                          style: const TextStyle(color: muted, fontSize: 12),
+                        ),
+                      ),
+                    ]),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              siteUrl.isEmpty ? 'Ortada değil, adil buluşun.' : Uri.parse(siteUrl).host,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
