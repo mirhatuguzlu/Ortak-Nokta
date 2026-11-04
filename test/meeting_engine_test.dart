@@ -104,4 +104,21 @@ void main() {
     expect(formatDistance(1530), '1.5 km');
     expect(formatDistance(420), '420 m');
   });
+
+  test('ince ızgara kaba ızgaranın bir adımı içinde kalır', () {
+    final coarse = candidateGrid([a, b]);
+    final best = coarse[10];
+    final fine = refineGrid(coarse, best);
+    expect(fine.length, 25);
+    expect(fine[12].latitude, closeTo(best.latitude, 1e-9));
+    final step = coarse[gridSize].latitude - coarse[0].latitude;
+    expect(fine.last.latitude - fine.first.latitude, closeTo(2 * step, 1e-9));
+  });
+
+  test('geç kalma payı çıkış saatini erkene çeker', () {
+    final at = DateTime(2026, 11, 4, 19, 0);
+    final d = departures(at, const [Leg(600, 0), Leg(600, 0)], [0, 10]);
+    expect(formatClock(d[0]), '18:50');
+    expect(formatClock(d[1]), '18:40');
+  });
 }

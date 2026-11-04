@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../engine/gathering.dart';
 import '../engine/meeting_engine.dart';
 import '../models.dart';
 import '../services/history_store.dart';
 import '../services/osm_api.dart';
 import '../services/planner.dart';
+import 'gathering_screen.dart';
 import 'map_parts.dart';
 import 'share_card.dart';
 
@@ -36,13 +39,109 @@ class _ResultScreenState extends State<ResultScreen> {
 
   /// Kullanıcının seçtiği varış saati; null = otomatik (en uzaktaki şimdi çıkar).
   DateTime? _arrival;
+  Weather? _weather;
+  late Gathering _gathering = Gathering(_gatheringKey, [for (final p in _people) p.name]);
 
   List<Participant> get _people => widget.people;
+
+  /// Aynı kişilerle açılan buluşma aynı defteri (liste, hesap, tam yer) görür.
+  String get _gatheringKey => ([for (final p in _people) p.name.trim().toLowerCase()]..sort()).join('|');
 
   @override
   void initState() {
     super.initState();
     _find();
+    _history.loadGathering(_gatheringKey).then((g) {
+      if (g != null && mounted) setState(() => _gathering = g);
+    });
+  }
+
+  /// Hava kötüyse mekan listesi kapalı yerleri öne alır. Tahmin alınamazsa sessizce geçilir.
+  Future<void> _loadWeather() async {
+    final p = _fairPoint;
+    if (p == null) return;
+    try {
+      final w = await _api.weather(p, _effectiveArrival);
+      if (mounted) setState(() => _weather = w);
+    } on ApiException {
+      // hava bilgisi süs; ana akışı bozmasın
+    }
+  }
+
+  Future<void> _editSpot() async {
+    final c = TextEditingController(text: _gathering.spot);
+    final v = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tam olarak nerede?'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(hintText: 'ör. Metro çıkışı, saat kulesinin altı'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(context, c.text), child: const Text('Kaydet')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    setState(() => _gathering.spot = v.trim());
+    _history.saveGathering(_gathering);
+  }
+
+  Future<void> _openGathering() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => GatheringScreen(gathering: _gathering, store: _history)));
+    if (mounted) setState(() {});
+  }
+
+  String _gatheringLabel() {
+    final open = _gathering.items.where((i) => i.who == null).length;
+    if (_gathering.items.isEmpty && _gathering.expenses.isEmpty) return 'Liste & hesap';
+    return open > 0 ? '$open şey boşta' : 'Liste & hesap ✓';
+  }
+
+  /// "Neredesin?" sorusunu bitiren hazır mesajlar: kişinin kendi süresine göre varış saati.
+  Future<void> _onMyWay() async {
+    final plan = _plan!;
+    final i = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          const ListTile(title: Text('Kim için?')),
+          for (var k = 0; k < _people.length; k++)
+            ListTile(
+              leading: CircleAvatar(backgroundColor: _people[k].color, child: Icon(_people[k].mode.icon, color: Colors.white)),
+              title: Text(_people[k].name),
+              onTap: () => Navigator.pop(context, k),
+            ),
+        ]),
+      ),
+    );
+    if (i == null || !mounted) return;
+    final eta = DateTime.now().add(Duration(seconds: plan.result.legs[i].seconds.ceil()));
+    final late = eta.difference(_effectiveArrival).inMinutes;
+    final where = plan.label.split(',').first;
+    final spot = _gathering.spot;
+    final messages = [
+      '🚶 Çıktım! ${formatClock(eta)} gibi oradayım ($where).',
+      if (late > 0) '⏱️ Kusura bakmayın, ~$late dk gecikeceğim (${formatClock(eta)}).',
+      '📍 Geldim. ${spot.isEmpty ? where : spot}',
+      '🔎 Neredesiniz? Ben ${spot.isEmpty ? 'buluşma noktasındayım' : spot}.',
+    ];
+    final msg = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          for (final m in messages)
+            ListTile(title: Text(m), trailing: const Icon(Icons.send), onTap: () => Navigator.pop(context, m)),
+        ]),
+      ),
+    );
+    if (msg != null) await SharePlus.instance.share(ShareParams(text: msg));
   }
 
   DateTime get _effectiveArrival => _arrival ?? suggestedArrival(DateTime.now(), _plan?.result.maxSeconds ?? 0);
@@ -68,6 +167,7 @@ class _ResultScreenState extends State<ResultScreen> {
         if (venue == null) _fairPoint = plan.result.point;
         _saved = false;
       });
+      if (venue == null) _loadWeather();
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
@@ -91,13 +191,18 @@ class _ResultScreenState extends State<ResultScreen> {
     if (at.isBefore(now)) at = at.add(const Duration(days: 1)); // geçmiş saat = yarın
     setState(() => _arrival = at);
     // Araçla gelen varsa trafik tahmini saate bağlı: süreleri o saate göre yenile.
-    if (_people.any((p) => p.mode == TravelMode.car)) _find(venue: _plan?.venue);
+    if (_people.any((p) => p.mode == TravelMode.car)) {
+      _find(venue: _plan?.venue);
+    } else {
+      _loadWeather();
+    }
   }
 
   Future<void> _chooseVenue() async {
     final v = await Navigator.push<Venue>(
       context,
-      MaterialPageRoute(builder: (_) => VenuesScreen(api: _api, center: _fairPoint!, selected: _plan!.venue)),
+      MaterialPageRoute(builder: (_) => VenuesScreen(
+              api: _api, center: _fairPoint!, selected: _plan!.venue, preferIndoor: _weather?.stayInside ?? false)),
     );
     if (v != null && mounted) _find(venue: identical(v, backToFairPoint) ? null : v);
   }
@@ -124,7 +229,7 @@ class _ResultScreenState extends State<ResultScreen> {
     final busy = _step != null;
     final arrival = _effectiveArrival;
     final legs = plan.result.legs;
-    final leave = departures(arrival, legs);
+    final leave = departures(arrival, legs, buffersOf(_people));
     return Scaffold(
       body: Column(children: [
         SizedBox(
@@ -162,17 +267,38 @@ class _ResultScreenState extends State<ResultScreen> {
             Text(plan.label, style: text.headlineSmall),
             const SizedBox(height: 16),
             _ArrivalChip(arrival: arrival, isAuto: _arrival == null, onTap: busy ? null : _pickArrival),
-            const SizedBox(height: 12),
+            if (_weather case final w?)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Icon(w.stayInside ? Icons.umbrella : Icons.wb_sunny_outlined, size: 20, color: scheme.secondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('${w.summary}${w.stayInside ? ' · kapalı mekan önerilir' : ''}',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  ),
+                ]),
+              ),
+            const SizedBox(height: 4),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.push_pin_outlined, color: scheme.secondary),
+              title: Text(_gathering.spot.isEmpty ? 'Tam olarak nerede buluşuyorsunuz?' : _gathering.spot),
+              subtitle: _gathering.spot.isEmpty ? const Text('"Neredesin?" mesajlarını bitirir') : null,
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: _editSpot,
+            ),
             for (var i = 0; i < _people.length; i++)
               _PersonRow(
                 person: _people[i],
                 leg: legs[i],
                 share: plan.result.maxSeconds == 0 ? 1 : legs[i].seconds / plan.result.maxSeconds,
                 leaveAt: leave[i],
+                buffer: _people[i].lateBuffer,
               ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: busy ? null : () => showShareSheet(context, plan, _people, arrival),
+              onPressed: busy ? null : () => showShareSheet(context, plan, _people, arrival, spot: _gathering.spot),
               icon: const Icon(Icons.ios_share),
               label: const Text('Gruba gönder'),
             ),
@@ -191,6 +317,24 @@ class _ResultScreenState extends State<ResultScreen> {
                   onPressed: () => launchUrl(Uri.parse(mapsLink(plan)), mode: LaunchMode.externalApplication),
                   icon: const Icon(Icons.directions_outlined),
                   label: const Text('Yol tarifi'),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openGathering,
+                  icon: const Icon(Icons.checklist),
+                  label: Text(_gatheringLabel()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : _onMyWay,
+                  icon: const Icon(Icons.near_me_outlined),
+                  label: const Text('Yoldayım'),
                 ),
               ),
             ]),
@@ -366,11 +510,13 @@ class _ArrivalChip extends StatelessWidget {
 }
 
 class _PersonRow extends StatelessWidget {
-  const _PersonRow({required this.person, required this.leg, required this.share, required this.leaveAt});
+  const _PersonRow(
+      {required this.person, required this.leg, required this.share, required this.leaveAt, this.buffer = 0});
   final Participant person;
   final Leg leg;
   final double share;
   final DateTime leaveAt;
+  final int buffer;
 
   @override
   Widget build(BuildContext context) {
@@ -406,7 +552,7 @@ class _PersonRow extends StatelessWidget {
                 child: Text('${person.mode.label} · ${formatDistance(leg.meters)}',
                     style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
               ),
-              Text('çıkış ${formatClock(leaveAt)}', style: text.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text('çıkış ${formatClock(leaveAt)}${buffer > 0 ? ' (+$buffer dk pay)' : ''}', style: text.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
             ]),
           ]),
         ),
@@ -420,10 +566,14 @@ const backToFairPoint = Venue('', VenueKind.park, LatLng(0, 0), 0);
 
 /// Tek iş: adil noktanın çevresinden oturulacak bir yer seçmek.
 class VenuesScreen extends StatefulWidget {
-  const VenuesScreen({super.key, required this.api, required this.center, this.selected});
+  const VenuesScreen(
+      {super.key, required this.api, required this.center, this.selected, this.preferIndoor = false});
   final OsmApi api;
   final LatLng center;
   final Venue? selected;
+
+  /// Yağmur/soğuk bekleniyorsa kapalı mekanlar öne alınır.
+  final bool preferIndoor;
 
   @override
   State<VenuesScreen> createState() => _VenuesScreenState();
@@ -432,6 +582,7 @@ class VenuesScreen extends StatefulWidget {
 class _VenuesScreenState extends State<VenuesScreen> {
   List<Venue>? _venues;
   String? _error;
+  final _need = <VenueFeature>{};
 
   @override
   void initState() {
@@ -455,7 +606,14 @@ class _VenuesScreenState extends State<VenuesScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final v = _venues;
+    final v = _venues == null
+        ? null
+        : ([
+            for (final x in _venues!)
+              if (_need.every(x.features.contains)) x
+          ]..sort((a, b) => widget.preferIndoor && a.kind.indoor != b.kind.indoor
+              ? (a.kind.indoor ? -1 : 1)
+              : a.meters.compareTo(b.meters)));
     final selected = widget.selected;
     return Scaffold(
       appBar: AppBar(title: const Text('Yakında nerede oturulur?')),
@@ -464,6 +622,23 @@ class _VenuesScreenState extends State<VenuesScreen> {
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
           child: Text('Birini seç, süreler o mekana göre yeniden hesaplansın.',
               style: TextStyle(color: scheme.onSurfaceVariant)),
+        ),
+        if (widget.preferIndoor)
+          ListTile(
+            leading: Icon(Icons.umbrella, color: scheme.secondary),
+            title: const Text('Hava kötü görünüyor; kapalı mekanlar önde.'),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Wrap(spacing: 8, runSpacing: 4, children: [
+            for (final f in VenueFeature.values)
+              FilterChip(
+                avatar: Icon(f.icon, size: 16),
+                label: Text(f.label),
+                selected: _need.contains(f),
+                onSelected: (on) => setState(() => on ? _need.add(f) : _need.remove(f)),
+              ),
+          ]),
         ),
         if (selected != null)
           ListTile(
@@ -477,7 +652,7 @@ class _VenuesScreenState extends State<VenuesScreen> {
         if (v != null && v.isEmpty)
           const Padding(
             padding: EdgeInsets.all(8),
-            child: Text('Bu noktanın yakınında kayıtlı kafe, restoran veya park yok.'),
+            child: Text('Bu noktanın yakınında bu özelliklere uyan kayıtlı mekan yok.'),
           ),
         for (final venue in v ?? const <Venue>[])
           ListTile(
@@ -489,7 +664,12 @@ class _VenuesScreenState extends State<VenuesScreen> {
               child: Icon(venue.kind.icon, color: scheme.secondary, size: 20),
             ),
             title: Text(venue.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${venue.kind.label} · adil noktaya ${formatDistance(venue.meters)}'),
+            subtitle: Text([
+              '${venue.kind.label} · adil noktaya ${formatDistance(venue.meters)}',
+              if (venue.features.isNotEmpty) venue.features.map((f) => f.label).join(' · '),
+              if (venue.hours != null) '🕒 ${venue.hours}',
+            ].join('\n')),
+            isThreeLine: venue.features.isNotEmpty || venue.hours != null,
             onTap: selected?.point == venue.point ? null : () => Navigator.pop(context, venue),
           ),
       ]),

@@ -22,6 +22,9 @@ const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 // Tanıtım sitesinin adresi (davet linki https://<site>/g/<id> olur). Boşsa yalnızca kod paylaşılır.
 const siteUrl = String.fromEnvironment('SITE_URL');
 
+// Hava tahmini: anahtarsız, ticari olmayan kullanımda ücretsiz.
+const weatherUrl = String.fromEnvironment('WEATHER_URL', defaultValue: 'https://api.open-meteo.com/v1/forecast');
+
 const tileUrl = String.fromEnvironment('TILE_URL',
     defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
 

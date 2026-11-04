@@ -211,6 +211,7 @@ class _PersonScreenState extends State<PersonScreen> {
   late final _name = TextEditingController(text: widget.person.name);
   late Place? _place = widget.person.place;
   late TravelMode _mode = widget.person.mode;
+  late bool _late = widget.person.lateBuffer > 0;
 
   @override
   void dispose() {
@@ -239,7 +240,8 @@ class _PersonScreenState extends State<PersonScreen> {
     widget.person
       ..name = _displayName
       ..place = _place
-      ..mode = _mode;
+      ..mode = _mode
+      ..lateBuffer = _late ? lateBufferMinutes : 0;
     Navigator.pop(context, PersonEdit.saved);
   }
 
@@ -293,6 +295,15 @@ class _PersonScreenState extends State<PersonScreen> {
               onSelected: m.available ? (_) => setState(() => _mode = m) : null,
             ),
         ]),
+        const SizedBox(height: 20),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.alarm),
+          title: const Text('Genelde geç kalır'),
+          subtitle: const Text('Çıkış saati $lateBufferMinutes dk erken gösterilir, kimse onu beklemez'),
+          value: _late,
+          onChanged: (v) => setState(() => _late = v),
+        ),
         if (widget.canRemove) ...[
           const SizedBox(height: 32),
           Align(

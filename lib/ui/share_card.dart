@@ -14,19 +14,24 @@ String mapsLink(Plan plan) =>
     'https://www.google.com/maps/search/?api=1&query=${plan.result.point.latitude.toStringAsFixed(6)},'
     '${plan.result.point.longitude.toStringAsFixed(6)}';
 
-String shareText(Plan plan, List<Participant> people, DateTime arrival) {
-  final leave = departures(arrival, plan.result.legs);
+List<int> buffersOf(List<Participant> people) => [for (final p in people) p.lateBuffer];
+
+String shareText(Plan plan, List<Participant> people, DateTime arrival, {String spot = ''}) {
+  final leave = departures(arrival, plan.result.legs, buffersOf(people));
   return [
     '📍 ${plan.label} · ${formatClock(arrival)}',
+    if (spot.trim().isNotEmpty) '📌 Tam yer: ${spot.trim()}',
     for (var i = 0; i < people.length; i++)
-      '${people[i].name}: ${formatDuration(plan.result.legs[i].seconds)} (çıkış ${formatClock(leave[i])})',
+      '${people[i].name}: ${formatDuration(plan.result.legs[i].seconds)} (çıkış ${formatClock(leave[i])}'
+          '${people[i].lateBuffer > 0 ? ', +${people[i].lateBuffer} dk pay' : ''})',
     mapsLink(plan),
     'Ortak Nokta ile adil buluşma noktası bulundu${siteUrl.isEmpty ? '' : ': $siteUrl'}',
   ].join('\n');
 }
 
 /// Önizlemeyi gösterir; "Paylaş" kartı görsel + metin olarak paylaşır.
-Future<void> showShareSheet(BuildContext context, Plan plan, List<Participant> people, DateTime arrival) {
+Future<void> showShareSheet(BuildContext context, Plan plan, List<Participant> people, DateTime arrival,
+    {String spot = ''}) {
   final boundary = GlobalKey();
   return showModalBottomSheet<void>(
     context: context,
@@ -49,7 +54,7 @@ Future<void> showShareSheet(BuildContext context, Plan plan, List<Participant> p
             icon: const Icon(Icons.ios_share),
             label: const Text('Görsel olarak paylaş'),
             onPressed: () async {
-              final text = shareText(plan, people, arrival);
+              final text = shareText(plan, people, arrival, spot: spot);
               try {
                 final obj = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
                 final image = await obj.toImage(pixelRatio: 3);
@@ -65,7 +70,7 @@ Future<void> showShareSheet(BuildContext context, Plan plan, List<Participant> p
             },
           ),
           TextButton(
-            onPressed: () => SharePlus.instance.share(ShareParams(text: shareText(plan, people, arrival))),
+            onPressed: () => SharePlus.instance.share(ShareParams(text: shareText(plan, people, arrival, spot: spot))),
             child: const Text('Yalnızca metin gönder'),
           ),
         ]),
@@ -84,7 +89,7 @@ class ShareCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final legs = plan.result.legs;
-    final leave = departures(arrival, legs);
+    final leave = departures(arrival, legs, buffersOf(people));
     final longest = plan.result.maxSeconds;
     const ink = Palette.ink, muted = Palette.inkSoft;
     return SizedBox(

@@ -27,7 +27,8 @@ Future<Plan> planMeeting(OsmApi api, List<Participant> people,
     void Function(String step)? onStep}) async {
   final points = [for (final p in people) p.place!.point];
   var candidates = venue == null ? candidateGrid(points) : [venue.point];
-  final legs = List<List<Leg?>>.filled(people.length, const []);
+  final centerIndex = candidates.length ~/ 2;
+  final legs = List<List<Leg?>>.generate(people.length, (_) => []);
 
   // Aynı araçla gelenler tek istekte hesaplanır.
   final groups = <String, List<int>>{};
@@ -37,23 +38,39 @@ Future<Plan> planMeeting(OsmApi api, List<Participant> people,
     groups.putIfAbsent(url, () => []).add(i);
   }
   final traffic = trafficFactor(at ?? DateTime.now());
-  List<LatLng?>? snapped;
-  for (final MapEntry(key: url, value: idx) in groups.entries) {
-    onStep?.call('Yol süreleri hesaplanıyor…');
-    final t = await api.table(url, [for (final i in idx) points[i]], candidates);
-    final f = url == osrmCarUrl ? traffic : 1.0;
-    for (var k = 0; k < idx.length; k++) {
-      legs[idx[k]] = [for (final l in t.rows[k]) l == null ? null : Leg(l.seconds * f, l.meters)];
+
+  /// Adayları ölçer, legs'e ekler; marker yol üzerinde dursun diye yola yapışmış konumlarını
+  /// döner (önce yürüyüş ağı: araçlı da son metreleri yürür).
+  Future<List<LatLng>> measure(List<LatLng> cands) async {
+    List<LatLng?>? snapped;
+    for (final MapEntry(key: url, value: idx) in groups.entries) {
+      onStep?.call('Yol süreleri hesaplanıyor…');
+      final car = url == osrmCarUrl;
+      final t = await api.table(url, [for (final i in idx) points[i]], cands,
+          walkLastMeters: car ? carWalkMaxMeters : null);
+      for (var k = 0; k < idx.length; k++) {
+        legs[idx[k]].addAll([
+          for (final l in t.rows[k])
+            l == null ? null : car ? Leg(l.seconds * traffic + carParkSeconds, l.meters) : l,
+        ]);
+      }
+      if (snapped == null || !car) snapped = t.snapped;
     }
-    snapped ??= t.snapped;
-  }
-  // Marker yol üzerinde dursun diye adayı ilk grubun yola yapışmış konumuyla değiştir
-  // (mekan seçildiyse mekanın kendi konumu kalır).
-  if (venue == null) {
-    candidates = [for (var c = 0; c < candidates.length; c++) snapped![c] ?? candidates[c]];
+    return [for (var c = 0; c < cands.length; c++) snapped![c] ?? cands[c]];
   }
 
-  final best = pickBest(candidates, legs, mode: mode, weights: weights);
+  if (venue == null) {
+    candidates = await measure(candidates);
+    // İkinci tur: kaba ızgaranın kazananı çevresinde sık ızgara.
+    final coarseBest = pickBest(candidates, legs, mode: mode, weights: weights, centerIndex: centerIndex);
+    if (coarseBest != null) {
+      candidates = [...candidates, ...await measure(refineGrid(candidateGrid(points), coarseBest.point))];
+    }
+  } else {
+    await measure(candidates);
+  }
+
+  final best = pickBest(candidates, legs, mode: mode, weights: weights, centerIndex: centerIndex);
   if (best == null) {
     throw ApiException(venue == null
         ? 'Bu konumlar için herkesin ulaşabildiği bir nokta bulunamadı.'
@@ -84,7 +101,11 @@ Future<Plan> planMeeting(OsmApi api, List<Participant> people,
               '${names[_argMax(weights)]} lehine ayarlandı.',
         if (groups.containsKey(osrmCarUrl))
           'Araç süreleri ${at == null ? 'şu saatin' : 'yolculuk saatinin'} tahmini trafiğine göre '
-              '×${traffic.toStringAsFixed(2)} artırıldı (canlı trafik değil).',
+              '×${traffic.toStringAsFixed(2)} artırıldı (canlı trafik değil); park yeri aramak ve '
+              'araçtan inip yürümek için ${(carParkSeconds / 60).round()} dk eklendi.',
+        if (groups.length > 1)
+          'Adalet süreye göre: arabalı daha uzun mesafe gider ama yürüyenle yaklaşık aynı '
+              'sürede varır. Bu yüzden nokta yavaş gelen kişiye daha yakındır.',
       ],
       venue: venue);
 }

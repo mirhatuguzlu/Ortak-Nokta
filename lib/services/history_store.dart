@@ -2,12 +2,14 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../engine/gathering.dart';
 import '../engine/meeting_engine.dart';
 
 /// Onaylanan buluşmalar ve tercihler yalnızca bu cihazda tutulur.
 class HistoryStore {
   static const _meetings = 'meetings_v1', _mode = 'fairness_mode', _rotate = 'rotate';
   static const maxRecords = 50;
+  static const _gatherings = 'gatherings_v1', maxGatherings = 20;
 
   Future<List<MeetingRecord>> load() async {
     final raw = (await SharedPreferences.getInstance()).getString(_meetings);
@@ -37,5 +39,25 @@ class HistoryStore {
     final p = await SharedPreferences.getInstance();
     await p.setString(_mode, mode.name);
     await p.setBool(_rotate, rotate);
+  }
+
+  Future<List<Gathering>> _loadGatherings() async {
+    final raw = (await SharedPreferences.getInstance()).getString(_gatherings);
+    if (raw == null) return [];
+    try {
+      return [for (final x in jsonDecode(raw) as List) Gathering.fromJson(x as Map<String, dynamic>)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Aynı buluşmaya (etiket + kişiler) dönüldüğünde liste ve hesap kaybolmasın.
+  Future<Gathering?> loadGathering(String key) async =>
+      (await _loadGatherings()).where((g) => g.key == key).firstOrNull;
+
+  Future<void> saveGathering(Gathering g) async {
+    final all = [g, ...(await _loadGatherings()).where((x) => x.key != g.key)].take(maxGatherings).toList();
+    await (await SharedPreferences.getInstance())
+        .setString(_gatherings, jsonEncode([for (final x in all) x.toJson()]));
   }
 }

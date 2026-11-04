@@ -8,6 +8,17 @@ import '../config.dart';
 import '../engine/meeting_engine.dart';
 import '../models.dart';
 
+class Weather {
+  const Weather(this.rainChance, this.celsius);
+  final int rainChance;
+  final double celsius;
+
+  /// Dışarıda oturmak için kötü hava: yağmur ihtimali yüksek ya da soğuk.
+  bool get stayInside => rainChance >= 50 || celsius < 8;
+
+  String get summary => '${celsius.round()}°C · yağış ihtimali %$rainChance';
+}
+
 class ApiException implements Exception {
   const ApiException(this.message);
   final String message;
@@ -74,9 +85,10 @@ class OsmApi {
   }
 
   /// Her kaynak için her hedefe süre/mesafe. Yola uzak (yapışmayan) hedefler null.
-  /// `snapped`: hedeflerin yol üzerindeki gerçek konumu.
+  /// `snapped`: hedeflerin yol üzerindeki gerçek konumu. `walkLastMeters` verilirse
+  /// (araç) yola o kadar uzak hedefler de tutulur: yoldan hedefe yürüme süresi eklenir.
   Future<({List<List<Leg?>> rows, List<LatLng?> snapped})> table(
-      String baseUrl, List<LatLng> sources, List<LatLng> destinations) {
+      String baseUrl, List<LatLng> sources, List<LatLng> destinations, {double? walkLastMeters}) {
     final s = [for (var i = 0; i < sources.length; i++) i].join(';');
     final d = [for (var i = 0; i < destinations.length; i++) sources.length + i].join(';');
     final uri = Uri.parse('$baseUrl/table/v1/driving/${_coords([...sources, ...destinations])}')
@@ -84,6 +96,8 @@ class OsmApi {
     return _get(uri, (j) {
       _checkOsrm(j);
       final dests = j['destinations'] as List;
+      final snapM = [for (final x in dests) (x['distance'] as num).toDouble()];
+      final reach = walkLastMeters ?? maxSnapMeters;
       final snapped = [
         for (final x in dests)
           (x['distance'] as num) > maxSnapMeters
@@ -95,9 +109,10 @@ class OsmApi {
         for (var i = 0; i < sources.length; i++)
           [
             for (var c = 0; c < destinations.length; c++)
-              snapped[c] == null || durs[i][c] == null || dists[i][c] == null
+              snapM[c] > reach || durs[i][c] == null || dists[i][c] == null
                   ? null
-                  : Leg((durs[i][c] as num).toDouble(), (dists[i][c] as num).toDouble()),
+                  : Leg((durs[i][c] as num).toDouble() + (walkLastMeters == null ? 0 : snapM[c] / walkSpeed),
+                      (dists[i][c] as num).toDouble() + (walkLastMeters == null ? 0 : snapM[c])),
           ],
       ];
       if (rows.length != sources.length || snapped.length != destinations.length) {
@@ -166,7 +181,10 @@ class OsmApi {
         if (kind == null || c['lat'] == null) continue;
         final point = _point(c['lat'], c['lon']);
         final name = (tags['name'] as String).trim();
-        out.add(Venue(name.length > 60 ? name.substring(0, 60) : name, kind, point, dist(p, point)));
+        final hours = tags['opening_hours'] is String ? (tags['opening_hours'] as String).trim() : null;
+        out.add(Venue(name.length > 60 ? name.substring(0, 60) : name, kind, point, dist(p, point),
+            features: VenueFeature.fromTags(tags),
+            hours: hours == null || hours.isEmpty ? null : (hours.length > 80 ? hours.substring(0, 80) : hours)));
       }
       out.sort((a, b) => a.meters.compareTo(b.meters));
       return out.take(15).toList();
@@ -180,6 +198,28 @@ class OsmApi {
     }
     return _nearbyCache[key] = venues;
   }
+
+  /// Buluşma saatindeki yağış olasılığı (%) ve sıcaklık (°C). Tahmin yoksa null.
+  Future<Weather?> weather(LatLng p, DateTime at) async {
+    final uri = Uri.parse(weatherUrl).replace(queryParameters: {
+      'latitude': p.latitude.toStringAsFixed(3),
+      'longitude': p.longitude.toStringAsFixed(3),
+      'hourly': 'precipitation_probability,temperature_2m',
+      'timezone': 'auto',
+      'forecast_days': '3',
+    });
+    final hour = '${at.year}-${_two(at.month)}-${_two(at.day)}T${_two(at.hour)}:00';
+    return _get(uri, (j) {
+      final h = j['hourly'];
+      final i = (h['time'] as List).indexOf(hour);
+      if (i < 0) return null;
+      final rain = h['precipitation_probability'][i], temp = h['temperature_2m'][i];
+      if (rain is! num || temp is! num) return null;
+      return Weather(rain.round().clamp(0, 100), temp.toDouble());
+    });
+  }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
 
   static String _label(dynamic x) {
     final name = x['name'] is String ? (x['name'] as String).trim() : '';

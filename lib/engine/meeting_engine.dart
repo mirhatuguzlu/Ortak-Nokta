@@ -32,15 +32,38 @@ List<LatLng> candidateGrid(List<LatLng> people) {
     final dLat = p.latitude - lat, dLon = (p.longitude - lon) * k;
     r = max(r, sqrt(dLat * dLat + dLon * dLon));
   }
+  return squareGrid(LatLng(lat, lon), r, gridSize);
+}
+
+/// `center` etrafında yarıçapı `r` derece (enlem cinsinden) olan n×n kare ızgara.
+List<LatLng> squareGrid(LatLng center, double r, int n) {
+  final k = cos(center.latitude * pi / 180);
   return [
-    for (var i = 0; i < gridSize; i++)
-      for (var j = 0; j < gridSize; j++)
+    for (var i = 0; i < n; i++)
+      for (var j = 0; j < n; j++)
         LatLng(
-          (lat + r * (2 * i / (gridSize - 1) - 1)).clamp(-89.9, 89.9),
-          (lon + r * (2 * j / (gridSize - 1) - 1) / k).clamp(-180.0, 180.0),
+          (center.latitude + r * (2 * i / (n - 1) - 1)).clamp(-89.9, 89.9),
+          (center.longitude + r * (2 * j / (n - 1) - 1) / k).clamp(-180.0, 180.0),
         ),
   ];
 }
+
+/// Kaba ızgaranın en iyi noktası çevresinde ikinci, sık ızgara: gerçek optimum iki kaba
+/// nokta arasına düştüğünde (ör. yürüyen kişiye 600 m uzakta) onu da yakalar.
+List<LatLng> refineGrid(List<LatLng> coarse, LatLng best) {
+  final step = (coarse[gridSize].latitude - coarse[0].latitude).abs(); // kaba ızgara aralığı
+  return squareGrid(best, step, 5);
+}
+
+/// Arabayla gelen kişi için park yeri arama payı. OSRM kapıdan kapıya süre verir;
+/// şehirde park aramak ve araçtan inip yürümek buna dahil değil.
+/// shortcut: sabit 5 dk; semte/saate göre park verisi olursa onunla değiştir.
+const carParkSeconds = 300.0;
+
+/// Arabayla gidilemeyen ama yakın olan noktaya (yaya bölgesi, park içi) arabayı en yakın
+/// yola bırakıp yürüyerek ulaşılır; bundan uzaksa ulaşılamaz sayılır.
+const carWalkMaxMeters = 700.0;
+const walkSpeed = 1.3; // m/sn, ~4.7 km/sa
 
 class MeetingResult {
   const MeetingResult(this.index, this.point, this.legs, this.centerLegs);
@@ -69,7 +92,7 @@ double metric(FairnessMode mode, List<Leg> legs) {
 /// ikincil ölçüt). `weights`: kişi başı çarpan, dönüşümlü adalet için (>1 = lehine).
 /// Herkesin ulaşamadığı adaylar elenir.
 MeetingResult? pickBest(List<LatLng> candidates, List<List<Leg?>> legs,
-    {FairnessMode mode = FairnessMode.fair, List<double>? weights}) {
+    {FairnessMode mode = FairnessMode.fair, List<double>? weights, int? centerIndex}) {
   List<Leg>? at(int c) {
     final row = [for (final p in legs) p[c]];
     return row.contains(null) ? null : row.cast<Leg>();
@@ -89,7 +112,7 @@ MeetingResult? pickBest(List<LatLng> candidates, List<List<Leg?>> legs,
     }
   }
   if (best == null) return null;
-  return MeetingResult(best, candidates[best], at(best)!, at(candidates.length ~/ 2));
+  return MeetingResult(best, candidates[best], at(best)!, at(centerIndex ?? candidates.length ~/ 2));
 }
 
 String formatDuration(double seconds) {
@@ -104,10 +127,12 @@ String formatClock(DateTime t) =>
     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 /// Kimse beklemesin diye herkesin `arrival` anında varması için çıkış saatleri
-/// (dakikaya aşağı yuvarlanır: geç kalmaktansa bir dakika erken).
-List<DateTime> departures(DateTime arrival, List<Leg> legs) => [
-      for (final l in legs)
-        _floorMinute(arrival.subtract(Duration(seconds: l.seconds.ceil()))),
+/// (dakikaya aşağı yuvarlanır: geç kalmaktansa bir dakika erken). `bufferMinutes`:
+/// kişi başı ek pay (ör. "hep geç kalır" diye işaretlenene 10 dk).
+List<DateTime> departures(DateTime arrival, List<Leg> legs, [List<int>? bufferMinutes]) => [
+      for (var i = 0; i < legs.length; i++)
+        _floorMinute(arrival.subtract(
+            Duration(seconds: legs[i].seconds.ceil() + 60 * (bufferMinutes?[i] ?? 0)))),
     ];
 
 /// Varış saati seçilmediyse: en uzaktaki kişi şimdi çıkar, varış 5 dakikaya yukarı yuvarlanır.

@@ -9,7 +9,7 @@ const sections = [
   ],
   [
     'Veriler nereye gönderiliyor?',
-    'Konumlar yalnızca rota ve süre hesabı için OpenStreetMap tabanlı servislere gönderilir: OSRM (FOSSGIS e.V., Almanya), Nominatim ve Overpass API. Bu servisler isteği yanıtlamak için işler; Ortak Nokta bu verileri kendi sunucusunda saklamaz.',
+    'Konumlar yalnızca rota ve süre hesabı için OpenStreetMap tabanlı servislere gönderilir: OSRM (FOSSGIS e.V., Almanya), Nominatim ve Overpass API; buluşma noktasının yaklaşık konumu hava tahmini için Open-Meteo’ya (İsviçre) gönderilir. Bu servisler isteği yanıtlamak için işler; Ortak Nokta bu verileri kendi sunucusunda saklamaz.',
   ],
   [
     'Davet linkleri',
