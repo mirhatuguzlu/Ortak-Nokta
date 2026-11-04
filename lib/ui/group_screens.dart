@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -8,10 +6,13 @@ import '../models.dart';
 import '../services/gathering_sync.dart';
 import '../services/group_api.dart';
 import '../services/history_store.dart';
+import '../services/live.dart';
 import '../services/osm_api.dart';
+import '../services/prefs.dart';
 import 'gathering_screen.dart';
 import 'location_sheet.dart';
 import 'result_screen.dart';
+import 'settings_screen.dart';
 import 'theme.dart';
 
 /// Grubun üyeleriyle sonuç ekranını açar; liste, hesap ve tam yer grubun ortak defterinde tutulur.
@@ -29,29 +30,42 @@ Future<void> openGroupResult(NavigatorState nav, String groupId, List<GroupMembe
           people: people, mode: mode, rotate: rotate, shared: SharedGathering(GroupApi(), groupId, m))));
 }
 
-/// Grup üyelerini ekran açıkken birkaç saniyede bir yeniler.
+/// Grup üyelerini ekran açıkken canlı tutar. Gruba girene kadar canlı kanal açılamaz
+/// (yalnızca üyeler dinler), o arada 10 sn'de bir bakılır; üye olunca kanala geçilir.
 mixin _MemberPolling<T extends StatefulWidget> on State<T> {
   final api = GroupApi();
   List<GroupMember>? members;
-  Timer? _timer;
+  LiveRefresh? _live;
+  String? _groupId;
+  bool _asMember = false;
 
   void startPolling(String id) {
-    Future<void> tick() async {
-      try {
-        final m = await api.members(id);
-        if (mounted) setState(() => members = m);
-      } on ApiException {
-        // Geçici ağ hatası: bir sonraki turda tekrar dener.
-      }
-    }
+    _groupId = id;
+    _listen(asMember: false);
+  }
 
-    tick();
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) => tick());
+  void _listen({required bool asMember}) {
+    _asMember = asMember;
+    _live?.dispose();
+    _live = LiveRefresh('group:$_groupId', 'changed', refreshMembers,
+        fallback: Duration(seconds: asMember ? 30 : 10));
+    refreshMembers();
+  }
+
+  Future<void> refreshMembers() async {
+    try {
+      final m = await api.members(_groupId!);
+      if (!mounted) return;
+      setState(() => members = m);
+      if (!_asMember && m.any((x) => x.isMe)) _listen(asMember: true);
+    } on ApiException {
+      // Geçici ağ hatası: bir sonraki turda tekrar dener.
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _live?.dispose();
     super.dispose();
   }
 }
@@ -104,6 +118,7 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
       if (!mounted) return;
       setState(() => _id = id);
       startPolling(id);
+      askForPushOnce(context);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -227,8 +242,8 @@ class JoinScreen extends StatefulWidget {
 
 class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
   final _osm = OsmApi();
-  TravelMode _mode = TravelMode.walk;
-  Place? _place;
+  TravelMode _mode = prefs.value.mode;
+  Place? _place = prefs.value.home;
   bool _busy = false;
   bool _joined = false;
 
@@ -269,10 +284,22 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
           _editing = false;
         });
       }
-      members = await api.members(widget.groupId);
-      if (mounted) setState(() {});
+      await refreshMembers();
+      if (mounted) askForPushOnce(context);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setMuted(bool muted) async {
+    setState(() => _busy = true);
+    try {
+      await api.setMuted(widget.groupId, muted);
+      await refreshMembers();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -329,6 +356,15 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
                         }),
                         child: const Text('Konumumu / aracımı değiştir'),
                       ),
+                      if (m.where((x) => x.isMe).firstOrNull case final mine?)
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: Icon(mine.muted ? Icons.notifications_off_outlined : Icons.notifications_outlined),
+                          title: const Text('Bu grubun bildirimleri'),
+                          subtitle: Text(mine.muted ? 'Sessizde: yalnızca Bildirimler sekmesinde görünür' : 'Telefonuna gelir'),
+                          value: !mine.muted,
+                          onChanged: _busy ? null : (on) => _setMuted(!on),
+                        ),
                     ]),
                   ),
                 )
@@ -345,7 +381,7 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.person_outline),
                   title: Text(me.value?.name ?? ''),
-                  subtitle: const Text('Gruba bu isimle katılacaksın (Hesabım menüsünden değişir)'),
+                  subtitle: const Text('Gruba bu isimle katılacaksın (Profil sekmesinden değişir)'),
                 ),
                 const SizedBox(height: 4),
                 Card(

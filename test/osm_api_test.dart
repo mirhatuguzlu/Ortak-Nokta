@@ -130,10 +130,36 @@ void main() {
     final hosts = <String>[];
     final api = OsmApi(client: MockClient((req) async {
       hosts.add(req.url.host);
-      return hosts.length == 1 ? http.Response('', 502) : http.Response('{"elements":[]}', 200);
+      if (req.url.host == Uri.parse(photonUrl).host) return http.Response('', 503);
+      return req.url.host == Uri.parse(overpassUrl).host ? http.Response('', 502) : http.Response('{"elements":[]}', 200);
     }));
     expect(await api.nearby(p), isEmpty);
-    expect(hosts, [Uri.parse(overpassUrl).host, Uri.parse(overpassFallbackUrl).host]);
+    expect(hosts, containsAll([Uri.parse(overpassUrl).host, Uri.parse(overpassFallbackUrl).host]));
+  });
+
+  test("nearby: Overpass sunucuları doluysa mekanlar Photon'dan gelir", () async {
+    final api = OsmApi(client: MockClient((req) async {
+      if (req.url.host != Uri.parse(photonUrl).host) return http.Response('', 504);
+      expect(req.url.queryParametersAll['osm_tag'], contains('leisure:park'));
+      expect(req.url.queryParameters['radius'], '0.45');
+      return http.Response.bytes(
+          utf8.encode(jsonEncode({
+            'features': [
+              {
+                'geometry': {'coordinates': [29, 41.002]},
+                'properties': {'osm_key': 'amenity', 'osm_value': 'cafe', 'name': 'Mado'},
+              },
+              {
+                'geometry': {'coordinates': [29, 41.001]},
+                'properties': {'osm_key': 'leisure', 'osm_value': 'park'}, // isimsiz: atılır
+              },
+            ],
+          })),
+          200);
+    }));
+    final v = await api.nearby(p);
+    expect(v.single.name, 'Mado');
+    expect(v.single.meters, closeTo(222, 3));
   });
 
   test('429 hatası anlaşılır mesaj verir', () async {

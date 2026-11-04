@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../engine/gathering.dart';
 import '../services/gathering_sync.dart';
+import '../services/live.dart';
 import '../services/osm_api.dart';
 
 /// Tek iş: buluşmanın lojistiği. "Ben mangalı alırım, sen kömürü" ve "kim kime ne borçlu".
@@ -19,20 +18,21 @@ class GatheringScreen extends StatefulWidget {
 
 class _GatheringScreenState extends State<GatheringScreen> {
   Gathering get _g => widget.sync.gathering;
-  Timer? _timer;
+  LiveRefresh? _live;
 
   @override
   void initState() {
     super.initState();
-    if (widget.sync.shared) {
+    if (widget.sync case SharedGathering(:final groupId)) {
       _reload();
-      _timer = Timer.periodic(const Duration(seconds: 5), (_) => _reload());
+      // Başkası listeye bir şey ekleyince ya da masraf girince ekran kendiliğinden yenilenir.
+      _live = LiveRefresh('group:$groupId', 'changed', _reload);
     }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _live?.dispose();
     super.dispose();
   }
 

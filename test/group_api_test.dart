@@ -110,6 +110,32 @@ void main() {
     expect(jsonDecode(sent.last.body)['p_for'], ['u1']);
   });
 
+  test('bildirimler: kutu okunur, yoldayım ve sessize alma doğru gider', () async {
+    final (api, sent) = fake({
+      'my_notifications': [
+        {'id': 'n1', 'group_id': id, 'kind': 'assigned', 'title': 'Ali sana bir iş verdi', 'body': '"Kömür" senden.',
+         'created_at': '2026-11-05T09:00:00+00:00', 'read': false},
+      ],
+      'ping': null,
+      'set_muted': null,
+      'mark_read': null,
+      'group_members': [
+        {...members.first, 'muted': true},
+      ],
+    });
+    final n = (await api.notifications()).single;
+    expect(n.groupId, id);
+    expect(n.read, isFalse);
+    expect(n.at.toUtc(), DateTime.utc(2026, 11, 5, 9));
+    await api.ping(id, 'late', 7);
+    expect(jsonDecode(sent.last.body), {'gid': id, 'p_kind': 'late', 'p_minutes': 7});
+    await api.setMuted(id, true);
+    expect(jsonDecode(sent.last.body), {'gid': id, 'p': true});
+    await api.markRead();
+    expect(jsonDecode(sent.last.body), {'p_ids': null});
+    expect((await api.members(id)).single.muted, isTrue);
+  });
+
   test('üye olmayan defteri açamaz, mesaj anlaşılır', () async {
     final (api, _) = fake({'gathering': 403});
     expect(

@@ -11,6 +11,9 @@ const nominatimUrl = String.fromEnvironment('NOMINATIM_URL',
 // (Kasım 2026'da denendi; private.coffee ve kumi.systems buradan yanıt vermedi).
 const overpassUrl = String.fromEnvironment('OVERPASS_URL',
     defaultValue: 'https://overpass-api.de/api/interpreter');
+// Overpass yoğunken (Kasım 2026: ana sunucu 502, yedek 504/18 sn) mekanlar buradan gelir:
+// aynı OSM verisi, ~1 sn, ama açılış saati gibi ayrıntılar olmadan.
+const photonUrl = String.fromEnvironment('PHOTON_URL', defaultValue: 'https://photon.komoot.io');
 const overpassFallbackUrl = String.fromEnvironment('OVERPASS_FALLBACK_URL',
     defaultValue: 'https://maps.mail.ru/osm/tools/overpass/api/interpreter');
 
@@ -18,6 +21,15 @@ const overpassFallbackUrl = String.fromEnvironment('OVERPASS_FALLBACK_URL',
 // şekilde tasarlandı; tablolar yalnızca supabase/schema.sql'deki fonksiyonlarla erişilir.
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+
+// Telefon bildirimleri (Firebase Cloud Messaging). Boşsa yalnızca uygulama içi bildirim kutusu
+// çalışır. Değerler: Firebase > Proje ayarları > Genel > Uygulamaların (SETUP.md > Bildirimler).
+const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+const firebaseIosApiKey = String.fromEnvironment('FIREBASE_IOS_API_KEY');
+const firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+const firebaseSenderId = String.fromEnvironment('FIREBASE_SENDER_ID');
+const firebaseAndroidAppId = String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
+const firebaseIosAppId = String.fromEnvironment('FIREBASE_IOS_APP_ID');
 
 // Tanıtım sitesinin adresi (davet linki https://<site>/g/<id> olur). Boşsa yalnızca kod paylaşılır.
 const siteUrl = String.fromEnvironment('SITE_URL');

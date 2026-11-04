@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../engine/meeting_engine.dart';
 import '../models.dart';
-import '../services/group_api.dart';
 import '../services/history_store.dart';
 import '../services/osm_api.dart';
+import '../services/prefs.dart';
 import 'location_sheet.dart';
 import 'map_parts.dart';
 import 'result_screen.dart';
@@ -23,7 +23,7 @@ class PeopleScreen extends StatefulWidget {
 class _PeopleScreenState extends State<PeopleScreen> {
   final _api = OsmApi();
   final _history = HistoryStore();
-  final _people = [Participant(me.value?.name ?? 'Sen', personColors[0]), Participant('Arkadaşın', personColors[1])];
+  final _people = [meAsParticipant(personColors[0]), Participant('Arkadaşın', personColors[1])];
   var _mode = FairnessMode.fair;
   var _rotate = true;
 

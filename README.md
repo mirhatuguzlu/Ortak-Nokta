@@ -18,7 +18,7 @@ Kuş uçumu değil, **gerçek yol ağına** ve **herkesin kendi ulaşım aracın
 ## Özellikler
 - **Adalet modu:** En adil (en uzun yolculuk en kısa), En hızlı (toplam süre en kısa), Eşit süre (fark en az).
 - **Kim kaçta çıksın:** Herkesin aynı anda varması için kişiye özel çıkış saati; varış saati seçilebilir.
-- **Yakındaki mekanlar:** Adil noktanın 450 m çevresindeki kafe, restoran, bar, park (Overpass API).
+- **Yakındaki mekanlar:** Adil noktanın 450 m çevresindeki kafe, restoran, bar, park (Overpass API; yoğunsa Photon).
   Birine dokununca süreler o mekana göre yeniden hesaplanır.
 - **Paylaşım kartı:** Buluşma yeri, süreler ve çıkış saatleri tek görselde (WhatsApp, hikâye).
 - **Adalet defteri / dönüşümlü adalet:** Kaydedilen buluşmalarda fazla yol yapan kişi bir sonraki
@@ -28,6 +28,13 @@ Kuş uçumu değil, **gerçek yol ağına** ve **herkesin kendi ulaşım aracın
   aynı isimdeki iki kişi grupta e-postayla ayrışır. Kurulum: [SETUP.md](SETUP.md).
 - **Buluşma defteri:** kim ne getiriyor listesi, en az havaleyle hesap bölüşme ve tam buluşma yeri.
   Davet grubunda herkes aynı defteri görür ve düzenler; davetsiz planda yalnızca cihazda tutulur.
+- **Canlı:** davet grubunda biri katılınca, listeye bir şey ekleyince ya da masraf girince herkesin
+  ekranı anında yenilenir (Supabase Realtime, yalnızca üyelere açık özel kanallar).
+- **Bildirimler:** katılan, sana verilen iş, seni ilgilendiren masraf, yoldayım/vardım ve "defter yarın
+  silinecek" hatırlatması. Uygulama içi kutu + telefon bildirimi (Firebase). Tür tür ve grup grup kapatılır.
+  Kim ne zaman alır: [SETUP.md](SETUP.md#kim-ne-zaman-bildirim-alır).
+- **Profil ve ayarlar:** isim, varsayılan araç, ev konumu, "genelde geç kalırım" (hesaba bağlı, her
+  cihazda aynı); bildirim türleri, tema, geçmişi silme, çıkış ve hesap silme. Alttaki yüzen menüden açılır.
 - **Tanıtım sitesi:** ayrı React projesi, `site/` (GitHub Pages). Davet linkleri de sitede açılır.
 
 ## Yapı
@@ -39,11 +46,16 @@ lib/services/osm_api.dart       OSM ağ trafiği tek kapı (OSRM, Nominatim, Ove
 lib/services/planner.dart       akış: table → seçim → rota → adres
 lib/services/group_api.dart     davet grupları (Supabase RPC)
 lib/services/history_store.dart adalet defteri ve tercihler (cihazda)
-lib/ui/                         ekranlar, her sayfa tek iş: home (ne yapacaksın) → people (kim nereden)
+lib/services/prefs.dart         hesaba bağlı tercihler (varsayılan araç, ev, bildirim türleri), tema
+lib/services/live.dart          canlı kanal (Realtime) + yedek yenileme
+lib/services/push.dart          telefon bildirimleri (Firebase Cloud Messaging)
+lib/ui/                         ekranlar, her sayfa tek iş. shell: yüzen alt menü (Buluş · Bildirimler · Profil · Ayarlar);
+                                home (ne yapacaksın) → people (kim nereden)
                                 → person (bir kişi) → result (yer ve saat) → venues (mekan seç)
 site/                           tanıtım sitesi + davet sayfası (React + Vite; uygulama paketine girmez)
 .github/workflows/site.yml      siteyi GitHub Pages'e yayınlar
-supabase/schema.sql             davet grupları veritabanı
+supabase/schema.sql             hesaplar, gruplar, defter, bildirimler, canlı kanal izinleri
+supabase/functions/push/        bildirimi telefona gönderen Edge Function
 ```
 Yeni ulaşım türü eklemek: `TravelMode`'a `osrmUrl` ver (ör. kendi OSRM'inde bisiklet profili) — başka değişiklik gerekmez.
 Toplu taşıma için OSRM yetmez; OpenTripPlanner (GTFS) gibi ayrı bir servis gerekir.

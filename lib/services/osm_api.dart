@@ -190,14 +190,57 @@ class OsmApi {
       return out.take(15).toList();
     }
 
+    Future<List<Venue>> overpass() async {
+      try {
+        return await _get(Uri.parse(overpassUrl).replace(queryParameters: {'data': q}), parse);
+      } on ApiException {
+        return _get(Uri.parse(overpassFallbackUrl).replace(queryParameters: {'data': q}), parse);
+      }
+    }
+
+    // İkisi birlikte başlar. Overpass ayrıntılıdır (saat, tekerlekli sandalye, wifi) ama sık sık
+    // dolu; 8 sn'de gelmezse Photon'unki kullanılır, o da olmazsa Overpass sonuna kadar beklenir.
+    final over = overpass()..ignore();
+    final photon = _photonNearby(p, radius, parse)..ignore();
     List<Venue> venues;
     try {
-      venues = await _get(Uri.parse(overpassUrl).replace(queryParameters: {'data': q}), parse);
-    } on ApiException {
-      venues = await _get(Uri.parse(overpassFallbackUrl).replace(queryParameters: {'data': q}), parse);
+      venues = await over.timeout(const Duration(seconds: 8));
+    } catch (_) {
+      try {
+        venues = await photon;
+      } on ApiException {
+        venues = await over;
+      }
     }
     return _nearbyCache[key] = venues;
   }
+
+  /// Photon'un sonucunu Overpass biçimine çevirip aynı ayrıştırıcıdan geçirir.
+  Future<List<Venue>> _photonNearby(LatLng p, int radius, List<Venue> Function(dynamic) parse) => _get(
+        Uri.parse('$photonUrl/reverse').replace(queryParameters: {
+          'lat': p.latitude.toStringAsFixed(6),
+          'lon': p.longitude.toStringAsFixed(6),
+          'radius': '${radius / 1000}',
+          'limit': '50',
+          'osm_tag': const [
+            'amenity:cafe', 'amenity:restaurant', 'amenity:fast_food', 'amenity:pub', //
+            'amenity:bar', 'amenity:ice_cream', 'leisure:park',
+          ],
+        }),
+        (j) => parse({
+          'elements': [
+            for (final f in j['features'] as List)
+              {
+                'lat': f['geometry']['coordinates'][1],
+                'lon': f['geometry']['coordinates'][0],
+                'tags': {
+                  '${f['properties']['osm_key']}': f['properties']['osm_value'],
+                  if (f['properties']['name'] != null) 'name': f['properties']['name'],
+                },
+              },
+          ],
+        }),
+      );
 
   /// Buluşma saatindeki yağış olasılığı (%) ve sıcaklık (°C). Tahmin yoksa null.
   Future<Weather?> weather(LatLng p, DateTime at) async {

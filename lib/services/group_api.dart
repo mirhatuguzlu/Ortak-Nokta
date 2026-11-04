@@ -11,7 +11,8 @@ import '../models.dart';
 import 'osm_api.dart';
 
 class GroupMember {
-  const GroupMember(this.id, this.name, this.mode, this.place, {this.userId = '', this.tag, this.isMe = false});
+  const GroupMember(this.id, this.name, this.mode, this.place,
+      {this.userId = '', this.tag, this.isMe = false, this.muted = false});
   final String id;
   final String name;
   final TravelMode mode;
@@ -22,15 +23,34 @@ class GroupMember {
   final String? tag;
   final bool isMe;
 
+  /// Yalnızca kendi kaydında anlamlı: bu grubun telefon bildirimlerini kapattın mı.
+  final bool muted;
+
   /// Ekranda ve defterde kullanılan, grup içinde benzersiz ad.
   String get label => tag == null ? name : '$name ($tag)';
 }
 
 class Profile {
-  const Profile(this.name, this.email);
+  const Profile(this.name, this.email, {this.prefs = const {}});
   final String? name;
   final String email;
+
+  /// Hesaba bağlı tercihler (services/prefs.dart okur).
+  final Map<String, Object?> prefs;
 }
+
+/// Uygulama içi bildirim kutusundaki bir satır.
+class AppNotification {
+  const AppNotification(this.id, this.groupId, this.kind, this.title, this.body, this.at, {this.read = false});
+  final String id;
+  final String? groupId;
+  final String kind, title, body;
+  final DateTime at;
+  final bool read;
+}
+
+/// Bildirim kutusu; alt menüdeki rozet ve Bildirimler sayfası bunu dinler.
+final inbox = ValueNotifier<List<AppNotification>>(const []);
 
 /// Giriş yapmış kişinin profili (isim + e-posta). null: giriş yok ya da henüz isim seçilmedi.
 final me = ValueNotifier<Profile?>(null);
@@ -96,6 +116,8 @@ class GroupApi {
         'not_member' => 'Bu defteri görmek için önce gruba katılmalısın.',
         'too_many' => 'Bu grupta çok fazla kayıt var.',
         'invalid_item' || 'invalid_expense' => 'Kayıt geçersiz; kişiler gruptan olmalı.',
+        'invalid_prefs' => 'Tercihler kaydedilemedi.',
+        'invalid_ping' || 'invalid_device' => 'İstek geçersiz.',
         'rate_limited' => 'Bugün çok fazla grup kurdun. Yarın tekrar dene.',
         _ => res.statusCode == 401 ? 'Oturumun kapanmış. Tekrar giriş yap.' : 'Sunucu hatası (${res.statusCode}).',
       });
@@ -112,8 +134,12 @@ class GroupApi {
     if (rows is! List || rows.isEmpty) return null;
     final r = rows.first;
     if (r is! Map || r['email'] is! String) _bad();
-    return Profile(r['name'] as String?, r['email'] as String);
+    final prefs = r['prefs'];
+    return Profile(r['name'] as String?, r['email'] as String,
+        prefs: prefs is Map ? prefs.cast<String, Object?>() : const {});
   }
+
+  Future<void> setPrefs(Map<String, Object?> prefs) => _rpc('set_prefs', {'p': prefs});
 
   Future<void> setProfile(String name) => _rpc('set_profile', {'p_name': name.trim()});
 
@@ -149,6 +175,7 @@ class GroupApi {
             userId: r['user_id'] as String? ?? '',
             tag: r['tag'] as String?,
             isMe: r['is_me'] == true,
+            muted: r['muted'] == true,
           ),
       ];
     } catch (_) {
@@ -214,9 +241,49 @@ class GroupApi {
 
   Future<void> deleteExpense(String expenseId) => _rpc('delete_expense', {'eid': expenseId});
 
+  // ---------- Bildirimler ----------
+
+  /// "Yoldayım" (on_way), "gecikeceğim" (late), "vardım" (arrived): gruptaki herkese gider.
+  Future<void> ping(String groupId, String kind, int minutes) =>
+      _rpc('ping', {'gid': groupId, 'p_kind': kind, 'p_minutes': minutes});
+
+  Future<void> setMuted(String groupId, bool muted) => _rpc('set_muted', {'gid': groupId, 'p': muted});
+
+  Future<List<AppNotification>> notifications() async {
+    final rows = await _rpc('my_notifications', {});
+    try {
+      return [
+        for (final r in rows as List)
+          AppNotification(r['id'] as String, r['group_id'] as String?, r['kind'] as String, r['title'] as String,
+              r['body'] as String, DateTime.parse(r['created_at'] as String).toLocal(),
+              read: r['read'] == true),
+      ];
+    } catch (_) {
+      _bad();
+    }
+  }
+
+  /// [ids] null: hepsi.
+  Future<void> markRead([List<String>? ids]) => _rpc('mark_read', {'p_ids': ids});
+
+  Future<void> registerDevice(String token, String platform) =>
+      _rpc('register_device', {'p_token': token, 'p_platform': platform});
+
+  Future<void> unregisterDevice(String token) => _rpc('unregister_device', {'p_token': token});
+
   static LatLng _point(Object? lat, Object? lon) {
     final la = (lat as num).toDouble(), lo = (lon as num).toDouble();
     if (la.abs() > 90 || lo.abs() > 180) throw const FormatException();
     return LatLng(la, lo);
+  }
+}
+
+/// Kutuyu sunucudan tazeler; geçici hatada eldeki liste kalır.
+Future<void> refreshInbox([GroupApi? api]) async {
+  if (!GroupApi.configured || me.value?.name == null) return;
+  try {
+    inbox.value = await (api ?? GroupApi()).notifications();
+  } on ApiException {
+    // bir sonraki sinyalde ya da yedek turda tekrar dener
   }
 }

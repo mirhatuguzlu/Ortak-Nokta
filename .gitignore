@@ -46,3 +46,6 @@ app.*.map.json
 
 # Claude Code yerel ayarları
 .claude/
+
+# Derleme değerleri (SETUP.md > 5)
+defines.json

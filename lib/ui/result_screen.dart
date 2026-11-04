@@ -117,9 +117,12 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   /// "Neredesin?" sorusunu bitiren hazır mesajlar: kişinin kendi süresine göre varış saati.
+  /// Davet grubunda "sen" bellidir ve mesaj gruptaki herkese bildirim olarak da gider.
   Future<void> _onMyWay() async {
     final plan = _plan!;
-    final i = await showModalBottomSheet<int>(
+    final group = _sync is SharedGathering ? _sync as SharedGathering : null;
+    final mine = group?.members.indexWhere((m) => m.isMe) ?? -1;
+    final i = mine >= 0 ? mine : await showModalBottomSheet<int>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -140,22 +143,40 @@ class _ResultScreenState extends State<ResultScreen> {
     final where = plan.label.split(',').first;
     final spot = _gathering.spot;
     final messages = [
-      '🚶 Çıktım! ${formatClock(eta)} gibi oradayım ($where).',
-      if (late > 0) '⏱️ Kusura bakmayın, ~$late dk gecikeceğim (${formatClock(eta)}).',
-      '📍 Geldim. ${spot.isEmpty ? where : spot}',
-      '🔎 Neredesiniz? Ben ${spot.isEmpty ? 'buluşma noktasındayım' : spot}.',
+      ('🚶 Çıktım! ${formatClock(eta)} gibi oradayım ($where).', 'on_way', (plan.result.legs[i].seconds / 60).ceil()),
+      if (late > 0) ('⏱️ Kusura bakmayın, ~$late dk gecikeceğim (${formatClock(eta)}).', 'late', late),
+      ('📍 Geldim. ${spot.isEmpty ? where : spot}', 'arrived', 0),
+      ('🔎 Neredesiniz? Ben ${spot.isEmpty ? 'buluşma noktasındayım' : spot}.', 'arrived', 0),
     ];
-    final msg = await showModalBottomSheet<String>(
+    final msg = await showModalBottomSheet<(String, String, int)>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: ListView(shrinkWrap: true, children: [
           for (final m in messages)
-            ListTile(title: Text(m), trailing: const Icon(Icons.send), onTap: () => Navigator.pop(context, m)),
+            ListTile(
+                title: Text(m.$1),
+                trailing: Icon(group == null ? Icons.send : Icons.notifications_active_outlined),
+                onTap: () => Navigator.pop(context, m)),
         ]),
       ),
     );
-    if (msg != null) await SharePlus.instance.share(ShareParams(text: msg));
+    if (msg == null || !mounted) return;
+    if (group != null) {
+      try {
+        await group.api.ping(group.groupId, msg.$2, msg.$3);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Gruba haber verildi'),
+          action: SnackBarAction(
+              label: 'Mesaj olarak da at', onPressed: () => SharePlus.instance.share(ShareParams(text: msg.$1))),
+        ));
+        return;
+      } on ApiException catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+    await SharePlus.instance.share(ShareParams(text: msg.$1));
   }
 
   DateTime get _effectiveArrival => _arrival ?? suggestedArrival(DateTime.now(), _plan?.result.maxSeconds ?? 0);

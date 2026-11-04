@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../models.dart';
 import '../services/group_api.dart';
 import '../services/osm_api.dart';
-import 'auth_screens.dart';
+import '../services/prefs.dart';
 import 'group_screens.dart';
 import 'history_screen.dart';
-import 'map_parts.dart';
 import 'people_screen.dart';
 import 'theme.dart';
 
@@ -22,7 +20,7 @@ class HomeScreen extends StatelessWidget {
     if (!GroupApi.configured) {
       return _snack(context, 'Davet linkleri yakında. (Geliştirici: SUPABASE_URL ve SUPABASE_ANON_KEY tanımlanmalı.)');
     }
-    final owner = Participant(me.value?.name ?? 'Sen', personColors[0]);
+    final owner = meAsParticipant(personColors[0]);
     final nav = Navigator.of(context);
     final ok = await nav.push<PersonEdit>(MaterialPageRoute(
       builder: (_) => PersonScreen(
@@ -75,12 +73,6 @@ class HomeScreen extends StatelessWidget {
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen())),
               icon: const Icon(Icons.menu_book_outlined),
             ),
-            IconButton(tooltip: 'Hakkında', onPressed: () => showAbout(context), icon: const Icon(Icons.info_outline)),
-            if (GroupApi.configured)
-              IconButton(
-                  tooltip: 'Hesabım',
-                  onPressed: () => showAccountSheet(context),
-                  icon: const Icon(Icons.account_circle_outlined)),
           ]),
           const SizedBox(height: 48),
           Text('Bugün kiminle buluşuyorsun?', style: text.headlineMedium),

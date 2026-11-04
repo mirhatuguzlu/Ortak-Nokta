@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/group_api.dart';
 import '../services/osm_api.dart';
+import '../services/prefs.dart';
+import '../services/push.dart';
 import 'theme.dart';
 
 /// Mobilde Google girişinden dönüş adresi (Supabase > Authentication > URL Configuration'a eklenmeli).
@@ -18,8 +20,10 @@ Future<void> signInWithGoogle() => Supabase.instance.client.auth.signInWithOAuth
     );
 
 Future<void> signOut() async {
+  await Push.unregister(); // oturum kapanmadan: bu telefona o hesabın bildirimleri gelmesin
   await Supabase.instance.client.auth.signOut();
   me.value = null;
+  inbox.value = const [];
 }
 
 /// Supabase yapılandırılmışsa uygulamanın tamamı giriş ister: önce Google, sonra isim.
@@ -89,6 +93,14 @@ class _AuthGateState extends State<AuthGate> {
         return;
       }
       me.value = p;
+      if (p.name != null) {
+        try {
+          await adoptServerPrefs(p.prefs, _api);
+        } on ApiException {
+          // tercihler yüklenemedi: bu cihazdakilerle devam
+        }
+        Push.sync();
+      }
       _onProfile();
     } on ApiException catch (e) {
       if (mounted) {
@@ -290,78 +302,4 @@ class _Problem extends StatelessWidget {
           ),
         ),
       );
-}
-
-/// Ana ekrandaki hesap menüsü: isim değiştir, çıkış, hesabı sil.
-Future<void> showAccountSheet(BuildContext context) {
-  final p = me.value;
-  if (p == null) return Future.value();
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (sheet) => SafeArea(
-      child: ListView(shrinkWrap: true, children: [
-        ListTile(
-          leading: const Icon(Icons.account_circle_outlined),
-          title: Text(p.name ?? ''),
-          subtitle: Text(p.email),
-        ),
-        ListTile(
-          leading: const Icon(Icons.edit_outlined),
-          title: const Text('İsmimi değiştir'),
-          onTap: () {
-            Navigator.pop(sheet);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (route) => NameScreen(
-                  api: GroupApi(),
-                  email: p.email,
-                  initial: p.name ?? '',
-                  onDone: () => Navigator.pop(route),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Çıkış yap'),
-          onTap: () {
-            Navigator.pop(sheet);
-            signOut();
-          },
-        ),
-        ListTile(
-          leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
-          title: const Text('Hesabımı sil'),
-          subtitle: const Text('Profilin ve grup üyeliklerin kalıcı olarak silinir'),
-          onTap: () async {
-            Navigator.pop(sheet);
-            final ok = await showDialog<bool>(
-              context: context,
-              builder: (d) => AlertDialog(
-                title: const Text('Hesap silinsin mi?'),
-                content: const Text('Bu geri alınamaz. Gruplardaki konumların ve ismin silinir; '
-                    'başkalarının hesap kayıtlarındaki tutarlar kalır.'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Vazgeç')),
-                  FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Sil')),
-                ],
-              ),
-            );
-            if (ok != true) return;
-            try {
-              await GroupApi().deleteAccount();
-              await signOut();
-            } on ApiException catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-              }
-            }
-          },
-        ),
-      ]),
-    ),
-  );
 }

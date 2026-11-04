@@ -145,7 +145,11 @@ function Group({ groupId, profile }) {
   const [members, setMembers] = useState(null)
   const [fatal, setFatal] = useState(null)
   const [joined, setJoined] = useState(false)
+  const host = members?.[0]?.name
+  const inGroup = !!(joined || members?.some((m) => m.isMe)) // linki tekrar açan zaten gruptaysa
 
+  // Gruptayken değişiklikler canlı kanaldan gelir (yalnızca üyeler dinleyebilir); kanal
+  // kurulamazsa ya da katılmadan önce yedek olarak aralıkla bakılır.
   useEffect(() => {
     let alive = true
     const tick = () =>
@@ -156,15 +160,23 @@ function Group({ groupId, profile }) {
           if (alive && /bulunamadı/.test(e.message)) setFatal(e.message)
         })
     tick()
-    const t = setInterval(tick, 4000)
+    const t = setInterval(tick, inGroup ? 30000 : 10000)
+    let channel = null
+    if (inGroup && supabase) {
+      supabase.realtime.setAuth().then(() => {
+        if (!alive) return
+        channel = supabase
+          .channel(`group:${groupId}`, { config: { private: true } })
+          .on('broadcast', { event: 'changed' }, tick)
+          .subscribe()
+      })
+    }
     return () => {
       alive = false
       clearInterval(t)
+      if (channel) supabase.removeChannel(channel)
     }
-  }, [groupId])
-
-  const host = members?.[0]?.name
-  const inGroup = joined || members?.some((m) => m.isMe) // linki tekrar açan zaten gruptaysa
+  }, [groupId, inGroup])
 
   return (
     <div className="join-page">
