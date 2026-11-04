@@ -24,7 +24,10 @@ Kuş uçumu değil, **gerçek yol ağına** ve **herkesin kendi ulaşım aracın
 - **Adalet defteri / dönüşümlü adalet:** Kaydedilen buluşmalarda fazla yol yapan kişi bir sonraki
   seçimde ±%25'e kadar lehine ağırlıklandırılır. Kayıtlar yalnızca cihazda (`shared_preferences`).
 - **Davet linki:** Grup kurucusu linki paylaşır, herkes uygulamadan veya web sitesinden kendi konumunu
-  ekler (Supabase, 24 saatte silinir). Kurulum: [SETUP.md](SETUP.md).
+  ekler (Supabase, 7 günde silinir). Supabase bağlıysa herkes Google ile girer ve bir isim seçer;
+  aynı isimdeki iki kişi grupta e-postayla ayrışır. Kurulum: [SETUP.md](SETUP.md).
+- **Buluşma defteri:** kim ne getiriyor listesi, en az havaleyle hesap bölüşme ve tam buluşma yeri.
+  Davet grubunda herkes aynı defteri görür ve düzenler; davetsiz planda yalnızca cihazda tutulur.
 - **Tanıtım sitesi:** ayrı React projesi, `site/` (GitHub Pages). Davet linkleri de sitede açılır.
 
 ## Yapı
@@ -47,8 +50,8 @@ Toplu taşıma için OSRM yetmez; OpenTripPlanner (GTFS) gibi ayrı bir servis g
 
 ## Güvenlik
 - Gizli anahtar yok. Supabase `anon` anahtarı herkese açık olacak şekilde tasarlandı ve derleme anında
-  `--dart-define` ile verilir (depoda yok). Tablolar anon role kapalı; yalnızca grup kimliği isteyen üç
-  fonksiyon açık, böylece kimse tüm konumları listeleyemez.
+  `--dart-define` ile verilir (depoda yok). Tablolar doğrudan erişime kapalı; yalnızca giriş yapmış kullanıcıya açık
+  fonksiyonlar var. Grup verisini yalnızca grubun üyeleri değiştirebilir, kimse tüm konumları listeleyemez.
 - Yalnızca HTTPS (`osm_api.dart` kontrolü + Android `usesCleartextTraffic=false` + iOS ATS).
 - Tüm yanıtlar şema ve koordinat aralığı kontrolünden geçer, 2 MB sınırı ve 15 sn zaman aşımı var; hatalar kullanıcıya iç ayrıntı sızdırmadan gösterilir.
 - Kullanıcı girdisi sınırlı (isim 30, arama 100 karakter). `allowBackup=false`.

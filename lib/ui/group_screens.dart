@@ -5,12 +5,29 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models.dart';
+import '../services/gathering_sync.dart';
 import '../services/group_api.dart';
+import '../services/history_store.dart';
 import '../services/osm_api.dart';
+import 'gathering_screen.dart';
 import 'location_sheet.dart';
+import 'result_screen.dart';
 import 'theme.dart';
 
-
+/// Grubun üyeleriyle sonuç ekranını açar; liste, hesap ve tam yer grubun ortak defterinde tutulur.
+Future<void> openGroupResult(NavigatorState nav, String groupId, List<GroupMember> members) async {
+  final m = members.take(5).toList();
+  final people = [
+    for (var i = 0; i < m.length; i++)
+      Participant(m[i].label, personColors[i])
+        ..place = m[i].place
+        ..mode = m[i].mode,
+  ];
+  final (mode, rotate) = await HistoryStore().loadPrefs();
+  nav.push(MaterialPageRoute(
+      builder: (_) => ResultScreen(
+          people: people, mode: mode, rotate: rotate, shared: SharedGathering(GroupApi(), groupId, m))));
+}
 
 /// Grup üyelerini ekran açıkken birkaç saniyede bir yeniler.
 mixin _MemberPolling<T extends StatefulWidget> on State<T> {
@@ -51,7 +68,8 @@ class _MemberTile extends StatelessWidget {
           backgroundColor: personColors[index % personColors.length],
           child: Icon(member.mode.icon, color: Colors.white, size: 20),
         ),
-        title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(member.isMe ? '${member.label} (sen)' : member.label,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(member.place.label, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: const Icon(Icons.check_circle, color: Colors.green),
       );
@@ -82,7 +100,7 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
     try {
       final id = await api.create();
       final o = widget.owner;
-      await api.join(id, o.name, o.mode, o.place!);
+      await api.join(id, o.mode, o.place!);
       if (!mounted) return;
       setState(() => _id = id);
       startPolling(id);
@@ -133,7 +151,7 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
                   const SizedBox(height: 4),
                   Text(
                     'Herkes kendi konumunu ve aracını ekler, sen burada canlı görürsün. '
-                    'Kimsenin uygulamayı indirmesi ya da üye olması gerekmez.',
+                    'Uygulaması olmayan siteden, Google hesabıyla tek dokunuşta katılır.',
                     style: TextStyle(color: scheme.onPrimaryContainer),
                   ),
                   const SizedBox(height: 16),
@@ -178,7 +196,7 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
             ]),
             for (var i = 0; i < m.length; i++) _MemberTile(i, m[i]),
             const SizedBox(height: 8),
-            Text('Davet 24 saat geçerlidir; sonra konumlar sunucudan silinir.',
+            Text('Davet 7 gün geçerlidir; sonra konumlar, liste ve hesap sunucudan silinir.',
                 style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           ],
         ]),
@@ -188,7 +206,7 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            onPressed: m.length >= 2 ? () => Navigator.pop(context, m) : null,
+            onPressed: m.length >= 2 ? () => Navigator.pop(context, (id!, m)) : null,
             icon: const Icon(Icons.join_inner),
             label: Text(m.length >= 2 ? '${m.length} kişiyle ortak noktayı bul' : 'En az bir kişinin katılması bekleniyor'),
           ),
@@ -209,11 +227,13 @@ class JoinScreen extends StatefulWidget {
 
 class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
   final _osm = OsmApi();
-  final _name = TextEditingController();
   TravelMode _mode = TravelMode.walk;
   Place? _place;
   bool _busy = false;
   bool _joined = false;
+
+  /// Zaten gruptaki kişi konumunu/aracını güncellemek istiyor.
+  bool _editing = false;
   String? _error;
 
   @override
@@ -222,27 +242,19 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
     startPolling(widget.groupId);
   }
 
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
   Future<void> _pickPlace() async {
     final p = await showModalBottomSheet<Place>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => LocationSheet(
-          api: _osm, name: _name.text.trim().isEmpty ? 'Sen' : _name.text.trim(), allowMapPick: false),
+      builder: (_) => LocationSheet(api: _osm, name: me.value?.name ?? 'Sen', allowMapPick: false),
     );
     if (p != null && mounted) setState(() => _place = p);
   }
 
   Future<void> _join() async {
-    final name = _name.text.trim();
-    if (name.isEmpty || _place == null) {
-      setState(() => _error = name.isEmpty ? 'Adını yaz.' : 'Nereden geleceğini seç.');
+    if (_place == null) {
+      setState(() => _error = 'Nereden geleceğini seç.');
       return;
     }
     setState(() {
@@ -250,8 +262,15 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
       _error = null;
     });
     try {
-      await api.join(widget.groupId, name, _mode, _place!);
-      if (mounted) setState(() => _joined = true);
+      await api.join(widget.groupId, _mode, _place!);
+      if (mounted) {
+        setState(() {
+          _joined = true;
+          _editing = false;
+        });
+      }
+      members = await api.members(widget.groupId);
+      if (mounted) setState(() {});
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -264,7 +283,8 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final m = members ?? const <GroupMember>[];
-    final host = m.isEmpty ? null : m.first.name;
+    final host = m.isEmpty ? null : m.first.label;
+    final joined = !_editing && (_joined || m.any((x) => x.isMe)); // linki tekrar açan zaten gruptaysa
     return Scaffold(
       appBar: AppBar(title: const Text('Ortak Nokta daveti')),
       body: SafeArea(
@@ -272,7 +292,7 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: ListView(padding: const EdgeInsets.all(20), children: [
-              if (_joined)
+              if (joined)
                 Card(
                   color: scheme.primaryContainer,
                   child: Padding(
@@ -283,8 +303,31 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
                       Text('Gruba katıldın!', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
                       Text(
-                        '${host ?? 'Grubu kuran kişi'} herkes katılınca ortak noktayı bulup grupla paylaşacak.',
+                        'Ortak noktayı sen de görebilirsin; kim ne getiriyor ve hesap herkesin ekranında aynı.',
                         textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: m.length >= 2 ? () => openGroupResult(Navigator.of(context), widget.groupId, m) : null,
+                        icon: const Icon(Icons.join_inner),
+                        label: Text(m.length >= 2 ? 'Ortak noktayı gör' : 'Başka birinin katılması bekleniyor'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => GatheringScreen(sync: SharedGathering(GroupApi(), widget.groupId, m))),
+                        ),
+                        icon: const Icon(Icons.checklist),
+                        label: const Text('Liste & hesap'),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _joined = false;
+                          _editing = true;
+                        }),
+                        child: const Text('Konumumu / aracımı değiştir'),
                       ),
                     ]),
                   ),
@@ -298,11 +341,11 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
-                TextField(
-                  controller: _name,
-                  maxLength: 30,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Adın', prefixIcon: Icon(Icons.person_outline)),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(me.value?.name ?? ''),
+                  subtitle: const Text('Gruba bu isimle katılacaksın (Hesabım menüsünden değişir)'),
                 ),
                 const SizedBox(height: 4),
                 Card(
@@ -345,7 +388,7 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Konumun yalnızca bu gruptakilerle ortak noktayı hesaplamak için kullanılır ve 24 saat içinde silinir.',
+                  'Konumun yalnızca bu gruptakilerle ortak noktayı hesaplamak için kullanılır ve 7 gün içinde silinir.',
                   textAlign: TextAlign.center,
                   style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),

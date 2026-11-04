@@ -2,8 +2,8 @@
 // Uygulamadaki lib/services/group_api.dart ve osm_api.dart ile aynı kurallar.
 
 const env = import.meta.env ?? {}
-const supabaseUrl = env.VITE_SUPABASE_URL ?? ''
-const supabaseKey = env.VITE_SUPABASE_ANON_KEY ?? ''
+export const supabaseUrl = env.VITE_SUPABASE_URL ?? ''
+export const supabaseKey = env.VITE_SUPABASE_ANON_KEY ?? ''
 export const invitesReady = Boolean(supabaseUrl && supabaseKey)
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
@@ -25,12 +25,21 @@ export const MODES = { walk: 'Yürüyerek', car: 'Araçla' }
 
 export class ApiError extends Error {}
 
+// Giriş yapmış kişinin erişim anahtarı; auth.js bağlar (testlerde supabase-js yüklenmesin diye ayrı).
+let tokenProvider = async () => null
+export const setTokenProvider = (fn) => {
+  tokenProvider = fn
+}
+
 export function rpcMessage(status, code) {
   return (
     {
-      group_not_found: 'Bu davet bulunamadı ya da süresi doldu. Davetler 24 saat geçerli.',
+      group_not_found: 'Bu davet bulunamadı ya da süresi doldu. Davetler 7 gün geçerli.',
+      auth_required: 'Oturumun kapanmış. Tekrar giriş yap.',
+      profile_required: 'Önce bir isim seçmelisin.',
+      invalid_name: 'İsim 1-30 karakter olmalı.',
       group_full: 'Grup dolmuş, en fazla 5 kişi olabiliyor.',
-      invalid_member: 'Bilgilerde bir sorun var. Adını ve konumunu kontrol eder misin?',
+      invalid_member: 'Bilgilerde bir sorun var. Konumunu kontrol eder misin?',
     }[code] ?? `Sunucu şu an yanıt vermiyor (${status}).`
   )
 }
@@ -56,9 +65,11 @@ async function fetchJson(url, init) {
 
 async function rpc(fn, args) {
   if (!invitesReady) throw new ApiError('Davet özelliği henüz açılmadı.')
+  const token = await tokenProvider()
+  if (!token) throw new ApiError('Önce Google ile giriş yapmalısın.')
   const { res, body } = await fetchJson(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
     method: 'POST',
-    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(args),
   })
   if (res.status === 429) throw new ApiError('Çok fazla istek. Biraz sonra tekrar dene.')
@@ -69,10 +80,9 @@ async function rpc(fn, args) {
 const validPoint = (lat, lon) =>
   Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
 
-export const joinGroup = (gid, name, mode, place) =>
+export const joinGroup = (gid, mode, place) =>
   rpc('join_group', {
     gid,
-    p_name: name,
     p_mode: mode,
     p_lat: place.lat,
     p_lon: place.lon,
@@ -84,8 +94,22 @@ export async function groupMembers(gid) {
   if (!Array.isArray(rows)) throw new ApiError('Beklenmeyen sunucu yanıtı.')
   return rows
     .filter((r) => typeof r.name === 'string' && MODES[r.mode] && validPoint(r.lat, r.lon))
-    .map((r) => ({ id: r.id, name: r.name, mode: r.mode, label: String(r.label ?? '') }))
+    .map((r) => ({
+      id: r.id,
+      name: r.tag ? `${r.name} (${r.tag})` : r.name, // aynı isimde iki kişi varsa e-postayla ayrışır
+      isMe: r.is_me === true,
+      mode: r.mode,
+      label: String(r.label ?? ''),
+    }))
 }
+
+/** Giriş yapmış kişinin ismi ve e-postası; isim seçilmemişse name null. */
+export async function myProfile() {
+  const rows = await rpc('my_profile', {})
+  return Array.isArray(rows) && rows[0] ? { name: rows[0].name ?? null, email: String(rows[0].email ?? '') } : null
+}
+
+export const setProfile = (name) => rpc('set_profile', { p_name: name.trim() })
 
 /** Nominatim adından kısa, okunur bir etiket üretir (uygulamadaki _label ile aynı). */
 export function placeLabel(x) {

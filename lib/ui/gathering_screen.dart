@@ -1,27 +1,62 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../engine/gathering.dart';
-import '../services/history_store.dart';
+import '../services/gathering_sync.dart';
+import '../services/osm_api.dart';
 
 /// Tek iş: buluşmanın lojistiği. "Ben mangalı alırım, sen kömürü" ve "kim kime ne borçlu".
-/// Her değişiklik anında cihaza yazılır; sayfadan çıkınca kaybolmaz.
+/// Her değişiklik anında kaydedilir: davet grubundaysa sunucuya (herkes görür), değilse cihaza.
 class GatheringScreen extends StatefulWidget {
-  const GatheringScreen({super.key, required this.gathering, this.store});
-  final Gathering gathering;
-  final HistoryStore? store;
+  const GatheringScreen({super.key, required this.sync});
+  final GatheringSync sync;
 
   @override
   State<GatheringScreen> createState() => _GatheringScreenState();
 }
 
 class _GatheringScreenState extends State<GatheringScreen> {
-  late final _store = widget.store ?? HistoryStore();
-  Gathering get _g => widget.gathering;
+  Gathering get _g => widget.sync.gathering;
+  Timer? _timer;
 
-  void _change(VoidCallback f) {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.sync.shared) {
+      _reload();
+      _timer = Timer.periodic(const Duration(seconds: 5), (_) => _reload());
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    try {
+      await widget.sync.reload();
+      if (mounted) setState(() {});
+    } on ApiException {
+      // geçici ağ hatası: bir sonraki turda tekrar dener
+    }
+  }
+
+  /// Değişikliği hemen gösterir, sonra kaydeder. Kayıt başarısızsa söyler ve sunucudaki
+  /// son hale döner (ortak defterde), böylece ekranda olmayan bir şey "kaydedildi" sanılmaz.
+  Future<void> _change(VoidCallback f, Future<void> Function() save) async {
     setState(f);
-    _store.saveGathering(_g);
+    try {
+      await save();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e is ApiException ? e.message : 'Kaydedilemedi. Tekrar dene.')));
+      await _reload();
+    }
   }
 
   Future<String?> _ask(String title, {String hint = '', String initial = ''}) {
@@ -48,7 +83,8 @@ class _GatheringScreenState extends State<GatheringScreen> {
   Future<void> _addItem() async {
     final name = (await _ask('Ne lazım?', hint: 'ör. Kömür'))?.trim();
     if (name == null || name.isEmpty) return;
-    _change(() => _g.items.add(BringItem(name)));
+    final item = BringItem(name);
+    _change(() => _g.items.add(item), () => widget.sync.addItems([item]));
   }
 
   Future<void> _template() async {
@@ -69,10 +105,12 @@ class _GatheringScreenState extends State<GatheringScreen> {
     );
     if (t == null) return;
     final have = {for (final i in _g.items) i.name.toLowerCase()};
-    _change(() => _g.items.addAll([
-          for (final n in bringTemplates[t]!)
-            if (!have.contains(n.toLowerCase())) BringItem(n),
-        ]));
+    final added = [
+      for (final n in bringTemplates[t]!)
+        if (!have.contains(n.toLowerCase())) BringItem(n),
+    ];
+    if (added.isEmpty) return;
+    _change(() => _g.items.addAll(added), () => widget.sync.addItems(added));
   }
 
   Future<void> _assign(BringItem item) async {
@@ -100,7 +138,7 @@ class _GatheringScreenState extends State<GatheringScreen> {
       ),
     );
     if (who == null) return;
-    _change(() => item.who = who.isEmpty ? null : who);
+    _change(() => item.who = who.isEmpty ? null : who, () => widget.sync.updateItem(item));
   }
 
   /// Yük dengeli kura: en az iş üstlenenler arasından rastgele.
@@ -118,7 +156,7 @@ class _GatheringScreenState extends State<GatheringScreen> {
       showDragHandle: true,
       builder: (_) => _ExpenseSheet(people: _g.people),
     );
-    if (e != null) _change(() => _g.expenses.add(e));
+    if (e != null) _change(() => _g.expenses.add(e), () => widget.sync.addExpense(e));
   }
 
   @override
@@ -131,7 +169,7 @@ class _GatheringScreenState extends State<GatheringScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Buluşma defteri'),
+          title: Text(widget.sync.shared ? 'Ortak buluşma defteri' : 'Buluşma defteri'),
           actions: [
             IconButton(
               tooltip: 'Gruba gönder',
@@ -162,9 +200,9 @@ class _GatheringScreenState extends State<GatheringScreen> {
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 20),
                     child: Icon(Icons.delete_outline, color: scheme.error)),
-                onDismissed: (_) => _change(() => _g.items.remove(item)),
+                onDismissed: (_) => _change(() => _g.items.remove(item), () => widget.sync.removeItem(item)),
                 child: ListTile(
-                  leading: Checkbox(value: item.done, onChanged: (v) => _change(() => item.done = v ?? false)),
+                  leading: Checkbox(value: item.done, onChanged: (v) => _change(() => item.done = v ?? false, () => widget.sync.updateItem(item))),
                   title: Text(item.name,
                       style: TextStyle(decoration: item.done ? TextDecoration.lineThrough : null)),
                   subtitle: Text(item.who ?? 'Kimse almadı',
@@ -194,7 +232,7 @@ class _GatheringScreenState extends State<GatheringScreen> {
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 20),
                     child: Icon(Icons.delete_outline, color: scheme.error)),
-                onDismissed: (_) => _change(() => _g.expenses.remove(e)),
+                onDismissed: (_) => _change(() => _g.expenses.remove(e), () => widget.sync.removeExpense(e)),
                 child: ListTile(
                   leading: const Icon(Icons.receipt_long_outlined),
                   title: Text(e.what),

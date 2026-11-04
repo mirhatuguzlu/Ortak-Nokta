@@ -25,7 +25,7 @@ void showAbout(BuildContext context) => showDialog<void>(
           'Harita verisi © OpenStreetMap katkıcıları, ODbL lisansı ile.\n'
           'Rotalar: OSRM (FOSSGIS sunucusu). Adres arama: Nominatim. Mekanlar: Overpass API. Hava: Open-Meteo.\n\n'
           'Konumların yalnızca rota hesaplamak için bu servislere gönderilir. Davet linki '
-          'kullanırsan grup konumları 24 saat sonra sunucudan silinir. Kaydettiğin buluşmalar '
+          'kullanırsan Google hesabınla giriş yaparsın; grup konumları, ortak liste ve hesap 7 gün sonra sunucudan silinir. Kaydettiğin buluşmalar '
           'yalnızca bu cihazda tutulur.',
         ),
         actions: [

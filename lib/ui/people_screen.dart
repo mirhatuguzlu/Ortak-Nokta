@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/meeting_engine.dart';
 import '../models.dart';
+import '../services/group_api.dart';
 import '../services/history_store.dart';
 import '../services/osm_api.dart';
 import 'location_sheet.dart';
@@ -22,7 +23,7 @@ class PeopleScreen extends StatefulWidget {
 class _PeopleScreenState extends State<PeopleScreen> {
   final _api = OsmApi();
   final _history = HistoryStore();
-  final _people = [Participant('Sen', personColors[0]), Participant('Arkadaşın', personColors[1])];
+  final _people = [Participant(me.value?.name ?? 'Sen', personColors[0]), Participant('Arkadaşın', personColors[1])];
   var _mode = FairnessMode.fair;
   var _rotate = true;
 
@@ -195,6 +196,7 @@ class PersonScreen extends StatefulWidget {
     this.canRemove = false,
     this.title,
     this.action,
+    this.fixedName = false,
   });
   final OsmApi api;
   final Participant person;
@@ -202,6 +204,9 @@ class PersonScreen extends StatefulWidget {
   final bool canRemove;
   final String? title;
   final String? action;
+
+  /// Davet grubunda isim hesaptan gelir; burada değiştirilemez.
+  final bool fixedName;
 
   @override
   State<PersonScreen> createState() => _PersonScreenState();
@@ -254,6 +259,7 @@ class _PersonScreenState extends State<PersonScreen> {
       body: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [
         TextField(
           controller: _name,
+          enabled: !widget.fixedName,
           maxLength: 30,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(labelText: 'Adı', counterText: ''),

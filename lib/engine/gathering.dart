@@ -3,8 +3,11 @@
 library;
 
 class BringItem {
-  BringItem(this.name, {this.who, this.done = false});
+  BringItem(this.name, {this.who, this.done = false, this.id});
   String name;
+
+  /// Ortak defterde sunucudaki kimlik; yerel defterde null.
+  String? id;
 
   /// Üstlenen kişinin adı; null = henüz kimse almadı.
   String? who;
@@ -16,8 +19,11 @@ class BringItem {
 }
 
 class Expense {
-  Expense(this.what, this.payer, this.kurus, this.forWhom);
+  Expense(this.what, this.payer, this.kurus, this.forWhom, {this.id});
   final String what;
+
+  /// Ortak defterde sunucudaki kimlik; yerel defterde null.
+  String? id;
   final String payer;
 
   /// Tutar kuruş cinsinden: kayan nokta yuvarlama hatası olmasın.

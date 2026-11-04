@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../services/group_api.dart';
-import '../services/history_store.dart';
 import '../services/osm_api.dart';
+import 'auth_screens.dart';
 import 'group_screens.dart';
 import 'history_screen.dart';
 import 'map_parts.dart';
 import 'people_screen.dart';
-import 'result_screen.dart';
 import 'theme.dart';
 
 /// Tek iş: ne yapmak istediğini seçmek. Her yol kendi sayfasına gider.
@@ -23,22 +22,16 @@ class HomeScreen extends StatelessWidget {
     if (!GroupApi.configured) {
       return _snack(context, 'Davet linkleri yakında. (Geliştirici: SUPABASE_URL ve SUPABASE_ANON_KEY tanımlanmalı.)');
     }
-    final me = Participant('Sen', personColors[0]);
+    final owner = Participant(me.value?.name ?? 'Sen', personColors[0]);
     final nav = Navigator.of(context);
     final ok = await nav.push<PersonEdit>(MaterialPageRoute(
-      builder: (_) => PersonScreen(api: OsmApi(), person: me, title: 'Önce sen', action: 'Davet linki oluştur'),
+      builder: (_) => PersonScreen(
+          api: OsmApi(), person: owner, title: 'Önce sen', action: 'Davet linki oluştur', fixedName: true),
     ));
     if (ok != PersonEdit.saved) return;
-    final members = await nav.push<List<GroupMember>>(MaterialPageRoute(builder: (_) => InviteScreen(owner: me)));
-    if (members == null) return;
-    final people = [
-      for (var i = 0; i < members.length && i < maxPeople; i++)
-        Participant(members[i].name, personColors[i])
-          ..place = members[i].place
-          ..mode = members[i].mode,
-    ];
-    final (mode, rotate) = await HistoryStore().loadPrefs();
-    nav.push(MaterialPageRoute(builder: (_) => ResultScreen(people: people, mode: mode, rotate: rotate)));
+    final result = await nav.push<(String, List<GroupMember>)>(MaterialPageRoute(builder: (_) => InviteScreen(owner: owner)));
+    if (result == null) return;
+    await openGroupResult(nav, result.$1, result.$2);
   }
 
   Future<void> _joinWithCode(BuildContext context) async {
@@ -83,6 +76,11 @@ class HomeScreen extends StatelessWidget {
               icon: const Icon(Icons.menu_book_outlined),
             ),
             IconButton(tooltip: 'Hakkında', onPressed: () => showAbout(context), icon: const Icon(Icons.info_outline)),
+            if (GroupApi.configured)
+              IconButton(
+                  tooltip: 'Hesabım',
+                  onPressed: () => showAccountSheet(context),
+                  icon: const Icon(Icons.account_circle_outlined)),
           ]),
           const SizedBox(height: 48),
           Text('Bugün kiminle buluşuyorsun?', style: text.headlineMedium),

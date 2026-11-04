@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../engine/gathering.dart';
 import '../engine/meeting_engine.dart';
 import '../models.dart';
+import '../services/gathering_sync.dart';
 import '../services/history_store.dart';
 import '../services/osm_api.dart';
 import '../services/planner.dart';
@@ -17,10 +18,13 @@ import 'share_card.dart';
 /// Tek iş: buluşma yerini ve kimin kaçta çıkacağını göstermek.
 /// Mekan seçimi ayrı sayfadadır (VenuesScreen); seçilen mekana göre süreler burada yenilenir.
 class ResultScreen extends StatefulWidget {
-  const ResultScreen({super.key, required this.people, required this.mode, required this.rotate});
+  const ResultScreen({super.key, required this.people, required this.mode, required this.rotate, this.shared});
   final List<Participant> people;
   final FairnessMode mode;
   final bool rotate;
+
+  /// Davet grubunun ortak defteri; null ise defter yalnızca bu cihazda.
+  final GatheringSync? shared;
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -40,7 +44,9 @@ class _ResultScreenState extends State<ResultScreen> {
   /// Kullanıcının seçtiği varış saati; null = otomatik (en uzaktaki şimdi çıkar).
   DateTime? _arrival;
   Weather? _weather;
-  late Gathering _gathering = Gathering(_gatheringKey, [for (final p in _people) p.name]);
+  late GatheringSync _sync =
+      widget.shared ?? LocalGathering(Gathering(_gatheringKey, [for (final p in _people) p.name]), _history);
+  Gathering get _gathering => _sync.gathering;
 
   List<Participant> get _people => widget.people;
 
@@ -51,8 +57,12 @@ class _ResultScreenState extends State<ResultScreen> {
   void initState() {
     super.initState();
     _find();
+    if (widget.shared != null) {
+      _sync.reload().then((_) => mounted ? setState(() {}) : null, onError: (_) {});
+      return;
+    }
     _history.loadGathering(_gatheringKey).then((g) {
-      if (g != null && mounted) setState(() => _gathering = g);
+      if (g != null && mounted) setState(() => _sync = LocalGathering(g, _history));
     });
   }
 
@@ -88,11 +98,15 @@ class _ResultScreenState extends State<ResultScreen> {
     );
     if (v == null || !mounted) return;
     setState(() => _gathering.spot = v.trim());
-    _history.saveGathering(_gathering);
+    try {
+      await _sync.setSpot(_gathering.spot);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _openGathering() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => GatheringScreen(gathering: _gathering, store: _history)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => GatheringScreen(sync: _sync)));
     if (mounted) setState(() {});
   }
 

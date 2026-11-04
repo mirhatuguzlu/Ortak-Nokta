@@ -5,7 +5,7 @@ import { Footer, Header } from './parts.jsx'
 const sections = [
   [
     'Hangi verileri işliyoruz?',
-    'Buluşma noktasını hesaplamak için girdiğin başlangıç konumları, ulaşım aracı ve kişi adları. Hesap açılmaz; e-posta, telefon numarası veya reklam kimliği toplanmaz.',
+    'Buluşma noktasını hesaplamak için girdiğin başlangıç konumları, ulaşım aracı ve kişi adları. Davet linki, ortak liste ve hesap için Google ile giriş yapılır: Google hesabının e-posta adresi ve seçtiğin isim tutulur. Telefon numarası veya reklam kimliği toplanmaz.',
   ],
   [
     'Veriler nereye gönderiliyor?',
@@ -13,11 +13,15 @@ const sections = [
   ],
   [
     'Davet linkleri',
-    'Davet linki kullandığında gruptaki kişilerin adı, aracı ve başlangıç konumu, grubu kuran kişinin ortak noktayı hesaplayabilmesi için sunucumuzda tutulur. Bu bilgilere yalnızca linke sahip olanlar erişebilir ve grup 24 saat sonra otomatik olarak silinir.',
+    'Davet linki kullandığında gruptaki kişilerin adı, aracı ve başlangıç konumu ile grubun ortak listesi, masrafları ve buluşma yeri notu sunucumuzda (Supabase, Frankfurt) tutulur. Konumlara yalnızca giriş yapmış ve linke sahip olanlar, liste ve masraflara yalnızca grubun üyeleri erişebilir. E-posta adresin yalnızca grupta seninle aynı isimde biri varsa, sizi ayırt etmek için o grubun üyelerine gösterilir. Grup ve içindekiler 7 gün sonra otomatik olarak silinir.',
   ],
   [
     'Cihazında kalanlar',
     'Kaydettiğin buluşmalar ("Adalet defteri") ve tercihlerin yalnızca telefonunda tutulur. Uygulama içinden istediğin an silebilirsin.',
+  ],
+  [
+    'Hesabını silmek',
+    'Uygulamada Hesabım > Hesabımı sil ile profilin ve grup üyeliklerin kalıcı olarak silinir. Başkalarının masraf kayıtlarındaki tutarlar, onların hesabı bozulmasın diye isimsiz olarak kalır.',
   ],
   ['Konum izni', '"Konumum" düğmesine bastığında bir kez konum alınır. Uygulama arka planda konum izlemez.'],
 ]

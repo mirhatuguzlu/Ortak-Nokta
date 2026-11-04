@@ -35,7 +35,7 @@ function Hero() {
           <a className="btn btn-primary" href="#nasil">
             Nasıl işlediğini gör
           </a>
-          <span className="quiet">Ücretsiz · üyelik yok · reklam yok</span>
+          <span className="quiet">Ücretsiz · Google ile tek dokunuş · reklam yok</span>
         </div>
       </div>
       <HeroMap />
@@ -230,7 +230,7 @@ function Invite() {
           <ul className="ticks">
             <li>Üyelik yok</li>
             <li>En fazla 5 kişi</li>
-            <li>Konumlar 24 saat sonra silinir</li>
+            <li>Konumlar 7 gün sonra silinir</li>
           </ul>
         </div>
         <div className="phone" aria-hidden="true">
@@ -259,7 +259,7 @@ function Privacy() {
           <b>Hesap yok.</b> E-posta, telefon ya da şifre sormuyoruz. Açıp kullanıyorsun.
         </p>
         <p>
-          <b>Saklamıyoruz.</b> Konumlar yalnızca yol hesabı için kullanılır; davet grupları 24 saatte silinir.
+          <b>Saklamıyoruz.</b> Konumlar yalnızca yol hesabı için kullanılır; davet grupları 7 günde silinir.
         </p>
         <p>
           <b>Defter cihazında.</b> Kaydettiğin buluşmalar telefonundan çıkmaz, istediğin an silersin.
