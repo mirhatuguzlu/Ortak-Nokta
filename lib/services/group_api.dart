@@ -31,8 +31,6 @@ class GroupApi {
   /// Paylaşılacak link; site adresi yoksa null (yalnızca kod paylaşılır).
   static String? link(String id) => siteUrl.isEmpty ? null : '$siteUrl/g/$id';
 
-  /// Uygulama yüklüyse açan link (web sayfasındaki "Uygulamada aç" düğmesi).
-  static String appLink(String id) => 'ortaknokta://join/g/$id';
 
   Future<dynamic> _rpc(String fn, Map<String, Object?> args) async {
     if (!configured) throw const ApiException('Davet özelliği henüz yapılandırılmadı.');

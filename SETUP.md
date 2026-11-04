@@ -20,33 +20,42 @@ ve **tanıtım sitesi** için gerekir. Hepsi ücretsiz katmanlarda çalışır.
 
 Bana bu iki değeri gönderebilirsin ya da aşağıdaki komutlarda kendin kullanabilirsin.
 
-## 2. Tanıtım sitesi (Flutter web)
+## 2. Tanıtım sitesi (React, GitHub Pages)
 
-Site aynı paketteki ayrı bir giriş noktasıdır: `lib/site/main.dart`. Davet linkleri
+Site uygulamadan ayrı bir projedir: [`site/`](site) (React + Vite). Davet linkleri
 (`https://<site>/g/<kod>`) uygulaması olmayan kişiler için sitede açılır.
 
+Yerelde:
+
 ```bash
-flutter build web -t lib/site/main.dart -o build/site --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJ... --dart-define=SITE_URL=https://ortaknokta.pages.dev
+cd site
+npm install
+npm run dev
 ```
 
-**Cloudflare Pages ile yayın (önerilen, ücretsiz):** <https://dash.cloudflare.com> → Workers & Pages →
-Create → Pages → **Upload assets** → `build/site` klasörünü sürükle. `web/_redirects` dosyası
-sayesinde `/g/...` ve `/gizlilik` adresleri doğru açılır. Adres `https://<proje-adı>.pages.dev` olur;
-istersen kendi alan adını bağlarsın.
+Davet sayfasını yerelde denemek için `site/.env.example`'ı `site/.env.local` olarak kopyalayıp değerleri doldur.
 
-Netlify da aynı `_redirects` dosyasıyla çalışır. Firebase Hosting kullanırsan `firebase.json`'a
-`"rewrites": [{"source": "**", "destination": "/index.html"}]` ekle.
+**GitHub Pages ile yayın (ücretsiz):** `main`'e `site/` altında bir değişiklik gittiğinde
+[`.github/workflows/site.yml`](.github/workflows/site.yml) siteyi derleyip yayınlar. Bir kez:
+
+1. Depo → **Settings → Pages → Source: GitHub Actions**.
+2. **Settings → Secrets and variables → Actions → Variables** altına `VITE_SUPABASE_URL` ve
+   `VITE_SUPABASE_ANON_KEY` ekle (anon anahtar herkese açık olacak şekilde tasarlandı).
+
+Adres, depo adı `<kullanıcı>.github.io` ise `https://<kullanıcı>.github.io`, değilse
+`https://<kullanıcı>.github.io/<depo>` olur; iş akışı alt yolu kendisi ayarlar. Derleme `index.html`'i
+`404.html` olarak da kopyalar, böylece `/g/...` ve `/gizlilik` adresleri doğrudan açılır.
 
 ## 3. Uygulamayı bu ayarlarla derlemek
 
 ```bash
-flutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJ... --dart-define=SITE_URL=https://ortaknokta.pages.dev
+flutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJ... --dart-define=SITE_URL=https://<kullanıcı>.github.io/<depo>
 ```
 
 Mağaza derlemesi:
 
 ```bash
-flutter build appbundle --release --obfuscate --split-debug-info=build/symbols --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJ... --dart-define=SITE_URL=https://ortaknokta.pages.dev
+flutter build appbundle --release --obfuscate --split-debug-info=build/symbols --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJ... --dart-define=SITE_URL=https://<kullanıcı>.github.io/<depo>
 ```
 
 Bu değerler verilmezse davet menüsü "yakında" mesajı gösterir; diğer her şey çalışır.
@@ -58,7 +67,7 @@ Bu değerler verilmezse davet menüsü "yakında" mesajı gösterir; diğer her 
   istersen sitede `/.well-known/assetlinks.json` (Android) ve `apple-app-site-association` (iOS)
   dosyaları ve manifest/entitlement ayarları gerekir; bunun için önce paket adı ve imzalama
   anahtarı kesinleşmeli.
-- **Mağaza linkleri:** Uygulama yayınlanınca `lib/site/landing_page.dart` içindeki `_StoreBadge`
+- **Mağaza linkleri:** Uygulama yayınlanınca `site/src/Landing.jsx` içindeki `Download` bölümündeki rozetler
   "Yakında" yerine mağaza adresine bağlanır.
 - **Kötüye kullanım:** `create_group` herkes tarafından çağrılabilir. Ücretsiz katmanda sorun
   olmaz; kötüye kullanım görürsen Supabase'de hız sınırı veya Cloudflare Turnstile eklenebilir.

@@ -25,7 +25,7 @@ Kuş uçumu değil, **gerçek yol ağına** ve **herkesin kendi ulaşım aracın
   seçimde ±%25'e kadar lehine ağırlıklandırılır. Kayıtlar yalnızca cihazda (`shared_preferences`).
 - **Davet linki:** Grup kurucusu linki paylaşır, herkes uygulamadan veya web sitesinden kendi konumunu
   ekler (Supabase, 24 saatte silinir). Kurulum: [SETUP.md](SETUP.md).
-- **Tanıtım sitesi:** Flutter web, `lib/site/`. Davet linkleri de sitede açılır.
+- **Tanıtım sitesi:** ayrı React projesi, `site/` (GitHub Pages). Davet linkleri de sitede açılır.
 
 ## Yapı
 ```
@@ -36,8 +36,10 @@ lib/services/osm_api.dart       OSM ağ trafiği tek kapı (OSRM, Nominatim, Ove
 lib/services/planner.dart       akış: table → seçim → rota → adres
 lib/services/group_api.dart     davet grupları (Supabase RPC)
 lib/services/history_store.dart adalet defteri ve tercihler (cihazda)
-lib/ui/                         uygulama ekranları
-lib/site/                       tanıtım sitesi (flutter build web -t lib/site/main.dart)
+lib/ui/                         ekranlar, her sayfa tek iş: home (ne yapacaksın) → people (kim nereden)
+                                → person (bir kişi) → result (yer ve saat) → venues (mekan seç)
+site/                           tanıtım sitesi + davet sayfası (React + Vite; uygulama paketine girmez)
+.github/workflows/site.yml      siteyi GitHub Pages'e yayınlar
 supabase/schema.sql             davet grupları veritabanı
 ```
 Yeni ulaşım türü eklemek: `TravelMode`'a `osrmUrl` ver (ör. kendi OSRM'inde bisiklet profili) — başka değişiklik gerekmez.

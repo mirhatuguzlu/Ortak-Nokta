@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../services/group_api.dart';
 import '../services/osm_api.dart';
 import 'location_sheet.dart';
+import 'theme.dart';
 
-const _memberColors = [Colors.indigo, Colors.deepOrange, Colors.purple, Colors.teal, Colors.brown];
+
 
 /// Grup üyelerini ekran açıkken birkaç saniyede bir yeniler.
 mixin _MemberPolling<T extends StatefulWidget> on State<T> {
@@ -48,7 +48,7 @@ class _MemberTile extends StatelessWidget {
   Widget build(BuildContext context) => ListTile(
         contentPadding: EdgeInsets.zero,
         leading: CircleAvatar(
-          backgroundColor: _memberColors[index % _memberColors.length],
+          backgroundColor: personColors[index % personColors.length],
           child: Icon(member.mode.icon, color: Colors.white, size: 20),
         ),
         title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -198,13 +198,10 @@ class _InviteScreenState extends State<InviteScreen> with _MemberPolling {
   }
 }
 
-/// Davet linkini açan kişinin ekranı (uygulamada ve tanıtım sitesinde aynı).
+/// Davet linkini açan kişinin ekranı (sitedeki karşılığı: site/src/Join.jsx).
 class JoinScreen extends StatefulWidget {
-  const JoinScreen({super.key, required this.groupId, this.onWeb = false});
+  const JoinScreen({super.key, required this.groupId});
   final String groupId;
-
-  /// Sitede: "Uygulamada aç" bağlantısı gösterilir.
-  final bool onWeb;
 
   @override
   State<JoinScreen> createState() => _JoinScreenState();
@@ -274,20 +271,7 @@ class _JoinScreenState extends State<JoinScreen> with _MemberPolling {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: ListView(padding: const EdgeInsets.all(16), children: [
-              if (widget.onWeb)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.phone_iphone),
-                    title: const Text('Uygulaman var mı?'),
-                    subtitle: const Text('Yoksa buradan devam et.'),
-                    trailing: TextButton(
-                      onPressed: () => launchUrl(Uri.parse(GroupApi.appLink(widget.groupId))),
-                      child: const Text('Uygulamada aç'),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
+            child: ListView(padding: const EdgeInsets.all(20), children: [
               if (_joined)
                 Card(
                   color: scheme.primaryContainer,

@@ -4,21 +4,21 @@ import '../engine/meeting_engine.dart';
 import '../services/history_store.dart';
 
 /// Kaydedilen buluşmalar ve kimin ne kadar fazla yol yaptığı (dönüşümlü adalet).
-class HistorySheet extends StatefulWidget {
-  const HistorySheet({super.key, required this.store});
-  final HistoryStore store;
+class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
 
   @override
-  State<HistorySheet> createState() => _HistorySheetState();
+  State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistorySheetState extends State<HistorySheet> {
+class _HistoryScreenState extends State<HistoryScreen> {
+  final _store = HistoryStore();
   List<MeetingRecord>? _records;
 
   @override
   void initState() {
     super.initState();
-    widget.store.load().then((r) => mounted ? setState(() => _records = r) : null);
+    _store.load().then((r) => mounted ? setState(() => _records = r) : null);
   }
 
   Future<void> _clear() async {
@@ -34,7 +34,7 @@ class _HistorySheetState extends State<HistorySheet> {
       ),
     );
     if (ok != true) return;
-    await widget.store.clear();
+    await _store.clear();
     if (mounted) setState(() => _records = []);
   }
 
@@ -54,19 +54,14 @@ class _HistorySheetState extends State<HistorySheet> {
     final people = bal.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final extreme = people.fold(60.0, (m, e) => e.value.abs() > m ? e.value.abs() : m);
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.95,
-      builder: (context, scroll) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Adalet defteri'), actions: [
+        if (records?.isNotEmpty ?? false)
+          IconButton(tooltip: 'Geçmişi sil', onPressed: _clear, icon: const Icon(Icons.delete_outline)),
+      ]),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          Row(children: [
-            Expanded(child: Text('Adalet defteri', style: text.titleLarge)),
-            if (records?.isNotEmpty ?? false)
-              IconButton(tooltip: 'Geçmişi sil', onPressed: _clear, icon: const Icon(Icons.delete_outline)),
-          ]),
           Text(
             'Kaydettiğiniz her buluşmada kimin grup ortalamasından ne kadar fazla yol yaptığı birikir. '
             '"Dönüşümlü adalet" açıksa bir sonraki nokta, fazla yol yapanın lehine kayar.',
@@ -83,7 +78,7 @@ class _HistorySheetState extends State<HistorySheet> {
                   const SizedBox(height: 8),
                   const Text('Henüz kayıtlı buluşma yok.', style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text('Bir buluşma noktası bulduktan sonra "Buluşmayı kaydet"e dokun.',
+                  Text('Bir buluşma noktası bulduktan sonra "Adalet defterine yaz"a dokun.',
                       textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
                 ]),
               ),

@@ -8,6 +8,7 @@ import '../config.dart';
 import '../engine/meeting_engine.dart';
 import '../models.dart';
 import '../services/planner.dart';
+import 'theme.dart';
 
 String mapsLink(Plan plan) =>
     'https://www.google.com/maps/search/?api=1&query=${plan.result.point.latitude.toStringAsFixed(6)},'
@@ -85,7 +86,7 @@ class ShareCard extends StatelessWidget {
     final legs = plan.result.legs;
     final leave = departures(arrival, legs);
     final longest = plan.result.maxSeconds;
-    const ink = Color(0xFF0B1F1A), muted = Color(0xFF5B6B66);
+    const ink = Palette.ink, muted = Palette.inkSoft;
     return SizedBox(
       width: 360,
       height: 450,
@@ -94,7 +95,7 @@ class ShareCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0E7C66), Color(0xFF075446)],
+            colors: [Palette.green, Palette.greenDeep],
           ),
         ),
         child: Padding(
@@ -109,12 +110,12 @@ class ShareCard extends StatelessWidget {
             const SizedBox(height: 16),
             Expanded(
               child: DecoratedBox(
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(20)),
                 child: Padding(
                   padding: const EdgeInsets.all(18),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     Text('BULUŞMA · ${formatClock(arrival)}',
-                        style: const TextStyle(color: Color(0xFF0E7C66), fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                        style: const TextStyle(color: Palette.clay, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
                     const SizedBox(height: 6),
                     Text(plan.label,
                         maxLines: 2,
@@ -145,14 +146,14 @@ class ShareCard extends StatelessWidget {
                           value: longest == 0 ? 1 : (legs[i].seconds / longest).clamp(0.04, 1),
                           minHeight: 5,
                           color: people[i].color,
-                          backgroundColor: const Color(0xFFE6EFEC),
+                          backgroundColor: Palette.paper,
                         ),
                       ),
                       const SizedBox(height: 10),
                     ],
                     const Spacer(),
                     Row(children: [
-                      const Icon(Icons.balance, size: 16, color: Color(0xFF0E7C66)),
+                      const Icon(Icons.balance, size: 16, color: Palette.clay),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(

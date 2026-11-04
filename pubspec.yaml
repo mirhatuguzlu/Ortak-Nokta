@@ -10,8 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_map: ^8.3.2
-  flutter_web_plugins:
-    sdk: flutter
   geolocator: ^14.1.2
   http: ^1.6.0
   latlong2: ^0.10.1
