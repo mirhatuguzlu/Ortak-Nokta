@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../models.dart';
@@ -97,6 +98,20 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Geliştirici derlemesinde Supabase değerleri verilmemişse giriş ekranı hiç açılmaz; nedenini söyle.
+                if (kDebugMode && !GroupApi.configured)
+                  Card(
+                    elevation: 0,
+                    color: scheme.errorContainer,
+                    child: const ListTile(
+                      leading: Icon(Icons.build_outlined),
+                      title: Text('Bu derlemede hesap kapalı'),
+                      subtitle: Text(
+                        'defines.json içine SUPABASE_URL ve SUPABASE_ANON_KEY yaz, uygulamayı '
+                        '--dart-define-from-file=defines.json ile yeniden başlat (hot reload yetmez).',
+                      ),
+                    ),
+                  ),
                 if (p != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),

@@ -242,6 +242,11 @@ depoya girmez.
 flutter run --dart-define-from-file=defines.json
 ```
 
+Android Studio'da yeşil ▶ düğmesi de bu dosyayı okur (Run → Edit Configurations → main.dart →
+**Additional run args**: `--dart-define-from-file=defines.json`). Değerleri değiştirince uygulamayı
+durdurup yeniden başlat; hot reload/restart yeni değerleri almaz. Değerler boşsa giriş ekranı hiç çıkmaz,
+Profil'de "Bu derlemede hesap kapalı" yazar.
+
 Mağaza derlemesi:
 
 ```bash
