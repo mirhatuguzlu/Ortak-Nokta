@@ -29,7 +29,7 @@ String? groupIdFromRoute(String? route) {
   return segments.length == 2 && segments[0] == 'g' ? GroupApi.parseId(segments[1]) : null;
 }
 
-/// Google girişinden dönüş (`ortaknokta://login-callback?code=…`): Supabase kendisi işler,
+/// Web'de Google girişinden dönüş (`/?code=…`): Supabase kendisi işler,
 /// Flutter'ın derin link olarak bir sayfa daha açmasına gerek yok.
 bool isAuthCallback(String? route) {
   final q = Uri.tryParse(route ?? '')?.queryParameters ?? const {};

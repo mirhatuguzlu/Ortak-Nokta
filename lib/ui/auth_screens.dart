@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../config.dart';
 
 import '../services/group_api.dart';
 import '../services/osm_api.dart';
@@ -10,18 +13,38 @@ import '../services/prefs.dart';
 import '../services/push.dart';
 import 'theme.dart';
 
-/// Mobilde Google girişinden dönüş adresi (Supabase > Authentication > URL Configuration'a eklenmeli).
-const authRedirect = 'ortaknokta://login-callback';
-
-Future<void> signInWithGoogle() => Supabase.instance.client.auth.signInWithOAuth(
+/// Telefonda Google'ın kendi hesap seçicisi uygulamanın içinde açılır (tarayıcıya gidilmez);
+/// seçilen hesabın kimlik belirteci Supabase'e verilir. Web'de olağan Google sayfası kullanılır.
+Future<void> signInWithGoogle() async {
+  final auth = Supabase.instance.client.auth;
+  if (kIsWeb) {
+    await auth.signInWithOAuth(
       OAuthProvider.google,
-      redirectTo: kIsWeb ? Uri.base.origin + Uri.base.path : authRedirect,
+      redirectTo: Uri.base.origin + Uri.base.path,
       queryParams: {'prompt': 'select_account'}, // ortak cihazda başka hesap seçilebilsin
     );
+    return;
+  }
+  if (googleWebClientId.isEmpty) throw const AuthException('GOOGLE_WEB_CLIENT_ID verilmemiş (SETUP.md > 2).');
+  await (_google ??= GoogleSignIn.instance.initialize(
+    serverClientId: googleWebClientId,
+    clientId: googleIosClientId.isEmpty ? null : googleIosClientId,
+  ));
+  final user = await GoogleSignIn.instance.authenticate();
+  final idToken = user.authentication.idToken;
+  if (idToken == null) throw const AuthException('Google kimlik belirteci vermedi.');
+  const scopes = ['email', 'profile'];
+  final grant = await user.authorizationClient.authorizationForScopes(scopes) ??
+      await user.authorizationClient.authorizeScopes(scopes);
+  await auth.signInWithIdToken(provider: OAuthProvider.google, idToken: idToken, accessToken: grant.accessToken);
+}
+
+Future<void>? _google; // initialize yalnızca bir kez çağrılabilir
 
 Future<void> signOut() async {
   await Push.unregister(); // oturum kapanmadan: bu telefona o hesabın bildirimleri gelmesin
   await Supabase.instance.client.auth.signOut();
+  if (_google != null) await GoogleSignIn.instance.signOut(); // sonraki girişte hesap seçici yine sorsun
   me.value = null;
   inbox.value = const [];
 }
@@ -152,6 +175,12 @@ class _SignInState extends State<_SignIn> {
     });
     try {
       await signInWithGoogle();
+    } on GoogleSignInException catch (e) {
+      if (e.code != GoogleSignInExceptionCode.canceled && mounted) {
+        setState(() => _error = 'Google girişi açılamadı (${e.code.name}). İnternetini kontrol edip tekrar dene.');
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = 'Giriş tamamlanamadı: ${e.message}');
     } catch (_) {
       if (mounted) setState(() => _error = 'Google girişi açılamadı. İnternetini kontrol edip tekrar dene.');
     } finally {

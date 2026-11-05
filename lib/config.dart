@@ -21,6 +21,10 @@ const overpassFallbackUrl = String.fromEnvironment('OVERPASS_FALLBACK_URL',
 // şekilde tasarlandı; tablolar yalnızca supabase/schema.sql'deki fonksiyonlarla erişilir.
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+// Telefonda uygulama içi Google girişi: Google Cloud'daki Web istemcisinin kimliği (Supabase'deki ile aynı)
+// ve iOS istemcisinin kimliği. Gizli değildir.
+const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
 
 // Telefon bildirimleri (Firebase Cloud Messaging). Boşsa yalnızca uygulama içi bildirim kutusu
 // çalışır. Değerler: Firebase > Proje ayarları > Genel > Uygulamaların (SETUP.md > Bildirimler).

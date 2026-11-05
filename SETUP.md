@@ -68,12 +68,30 @@ Supabase bağlıysa uygulama ve site herkesten giriş ister.
      Doğru adresi Supabase'de **Authentication → Sign In / Providers → Google** sayfasında
      **Callback URL (for OAuth)** olarak görürsün.
    - **Create** → çıkan **Client ID** ve **Client secret**'ı kopyala. Secret yalnızca bir kez tam görünür.
-6. Supabase → **Authentication → Sign In / Providers → Google** → **Enable Sign in with Google** →
-   Client ID ve Client Secret'ı yapıştır → **Save**.
+     Bu Client ID → `defines.json`'da `GOOGLE_WEB_CLIENT_ID`.
+
+   Telefonda giriş tarayıcıya gitmez: Google'ın hesap seçicisi uygulamanın içinde açılır. Bunun için
+   Google'ın uygulamayı tanıması gerekir; aynı **Clients** sayfasında iki istemci daha oluştur:
+   - **Create client → Android**: **Package name** `com.ortaknokta.ortak_nokta`, **SHA-1** aşağıdaki
+     gibi. Her imza için ayrı bir Android istemcisi oluştur (aynı paket adı, farklı SHA-1):
+     - Deneme (debug) imzası: proje kökünde `cd android` sonra `./gradlew signingReport` →
+       `Variant: debug` altındaki **SHA1**.
+     - Play Store imzası: Play Console → uygulaman → **Test and release → App integrity → Play app signing**
+       → **App signing key certificate** altındaki **SHA-1**. (Kendi yükleme anahtarının SHA-1'ini de ekle.)
+     Android istemcisinin kimliğini uygulamaya yazmana gerek yok; Google paket adı ve SHA-1 ile eşleştirir.
+     SHA-1 uymazsa giriş ekranı "Google girişi açılamadı" der.
+   - **Create client → iOS**: **Bundle ID** `com.ortaknokta.ortakNokta`. Client ID → `GOOGLE_IOS_CLIENT_ID`.
+     Aynı sayfadaki **iOS URL scheme** değerini (`com.googleusercontent.apps.…`) `ios/Runner/Info.plist`'te
+     `CFBundleURLSchemes` dizisine `ortaknokta`'nın yanına ikinci satır olarak ekle.
+6. Supabase → **Authentication → Sign In / Providers → Google** → **Enable Sign in with Google**:
+   - **Client IDs**: virgülle ayırarak önce Web, sonra Android ve iOS istemci kimlikleri.
+   - **Client Secret (for OAuth)**: Web istemcisinin secret'ı.
+   - **Skip nonce checks**: açık (Google'ın telefon kütüphanesi bu değeri göndermiyor; Supabase'in kendi
+     belgesi de böyle söylüyor).
+   - **Save**.
 7. Supabase → **Authentication → URL Configuration**:
    - **Site URL**: sitenin ana adresi, örneğin `https://<kullanıcı>.github.io/<depo>`.
    - **Redirect URLs** → **Add URL** ile şunları tek tek ekle:
-     - `ortaknokta://login-callback` (Android ve iOS uygulaması)
      - `https://<kullanıcı>.github.io/<depo>/**` (site ve davet sayfaları)
      - `http://localhost:5173/**` (site, yerel deneme)
      - `http://localhost:5174/**` (uygulamanın web hali, yerel deneme)
@@ -228,6 +246,8 @@ depoya girmez.
 {
   "SUPABASE_URL": "https://xxxx.supabase.co",
   "SUPABASE_ANON_KEY": "sb_publishable_...",
+  "GOOGLE_WEB_CLIENT_ID": "1234567890-abc.apps.googleusercontent.com",
+  "GOOGLE_IOS_CLIENT_ID": "1234567890-def.apps.googleusercontent.com",
   "SITE_URL": "https://<kullanıcı>.github.io/<depo>",
   "FIREBASE_API_KEY": "AIza...",
   "FIREBASE_PROJECT_ID": "ortak-nokta-xxxx",
