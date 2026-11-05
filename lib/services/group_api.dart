@@ -76,7 +76,8 @@ class GroupApi {
   static String? parseId(String text) => _uuid.firstMatch(text)?.group(0)?.toLowerCase();
 
   /// Paylaşılacak link; site adresi yoksa null (yalnızca kod paylaşılır).
-  static String? link(String id) => siteUrl.isEmpty ? null : '$siteUrl/g/$id';
+  // Sondaki / ile yazılmış adres // üretmesin.
+  static String? link(String id) => siteUrl.isEmpty ? null : '${siteUrl.replaceFirst(RegExp(r'/+$'), '')}/g/$id';
 
   Future<dynamic> _rpc(String fn, Map<String, Object?> args) async {
     if (_url.isEmpty || _key.isEmpty) throw const ApiException('Davet özelliği henüz yapılandırılmadı.');
