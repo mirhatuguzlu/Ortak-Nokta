@@ -141,16 +141,20 @@ class _AuthGateState extends State<AuthGate> {
     return Stack(children: [
       Offstage(offstage: !ready, child: TickerMode(enabled: ready, child: widget.child)),
       // Kendi Navigator'ı: metin alanları ve diyaloglar için Overlay gerekir; aşama değişince yenilenir.
+      // HeroControllerScope.none: yoksa uygulamanın ana gezgininin HeroController'ını ödünç alır,
+      // ana gezgin bozulur ve sonraki her sayfa siyah açılıp donar.
       if (!ready)
-        Navigator(
-          key: ValueKey(_stage),
-          onGenerateRoute: (_) => MaterialPageRoute(
-            builder: (_) => switch (_stage) {
-              _Stage.signedOut => const _SignIn(),
-              _Stage.needsName => NameScreen(api: _api, email: me.value?.email ?? ''),
-              _Stage.error => _Problem(message: _error ?? '', onRetry: _load),
-              _ => const Scaffold(body: Center(child: CircularProgressIndicator())),
-            },
+        HeroControllerScope.none(
+          child: Navigator(
+            key: ValueKey(_stage),
+            onGenerateRoute: (_) => MaterialPageRoute(
+              builder: (_) => switch (_stage) {
+                _Stage.signedOut => const _SignIn(),
+                _Stage.needsName => NameScreen(api: _api, email: me.value?.email ?? ''),
+                _Stage.error => _Problem(message: _error ?? '', onRetry: _load),
+                _ => const Scaffold(body: Center(child: CircularProgressIndicator())),
+              },
+            ),
           ),
         ),
     ]);
