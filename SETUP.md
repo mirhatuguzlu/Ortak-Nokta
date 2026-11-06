@@ -239,7 +239,9 @@ Adres, depo adı `<kullanıcı>.github.io` ise `https://<kullanıcı>.github.io`
 
 ## 5. Uygulamayı bu ayarlarla derlemek
 
-Değerleri her seferinde yazmamak için proje kökünde `defines.json` oluştur. Dosya `.gitignore`'da;
+Bu projenin değerleri `lib/config.dart`'ta varsayılan olarak yazılı; düz `flutter run` yeter. Hepsi uygulamanın
+içinde zaten herkese açık olan istemci değerleri (gizli anahtarlar buraya asla yazılmaz). Başka bir Supabase/Firebase
+projesiyle derlemek için proje kökünde `defines.json` oluştur. Dosya `.gitignore`'da;
 depoya girmez.
 
 ```json

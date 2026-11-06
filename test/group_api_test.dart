@@ -30,7 +30,7 @@ void main() {
   test('yapılandırılmamışsa sunucuya gitmeden anlaşılır hata verir', () {
     expect(GroupApi.configured, isFalse);
     expect(GroupApi().create(), throwsA(isA<Exception>()));
-  });
+  }, skip: GroupApi.configured ? 'Supabase varsayılanı var; denemek için: flutter test --dart-define=SUPABASE_URL=' : false);
 
   /// Sahte Supabase: fonksiyon adına göre yanıt verir, gönderilenleri kaydeder.
   (GroupApi, List<http.Request>) fake(Map<String, Object?> replies, {String? token = 'tok'}) {
