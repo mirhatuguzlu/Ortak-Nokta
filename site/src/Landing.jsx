@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { BASE, Footer, Header, Icon } from './parts.jsx'
 
 export default function Landing() {
@@ -5,6 +6,7 @@ export default function Landing() {
     <>
       <Header />
       <main>
+        <PillHero />
         <Hero />
         <Story />
         <How />
@@ -19,14 +21,87 @@ export default function Landing() {
   )
 }
 
+// MotionSites "Wild Pill": a hairline between the two words opens into a window — the common point itself.
+// Free background loop from motionsites.ai/backgrounds ("Lakeside Gathering").
+const PILL_VIDEO =
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260323_071151_38c3924f-c312-48af-a196-3fbb80e4226f.mp4'
+
+function PillHero() {
+  const root = useRef(null)
+
+  useEffect(() => {
+    const el = root.current
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const $ = (s) => el.querySelector(s)
+    const stacked = matchMedia('(max-width: 720px)').matches
+    const ease = ['cubic-bezier(.5,0,.3,1)', 'cubic-bezier(.45,0,.3,1)', 'cubic-bezier(.4,0,.2,1)']
+    const anims = []
+    const play = (node, frames, opts) => anims.push(node.animate(frames, { duration: 2100, fill: 'both', ...opts }))
+
+    // Desktop opens sideways, a phone opens top-to-bottom; same hairline → slit → circle → pill curve.
+    const pill = $('.pill')
+    const size = stacked ? 'height' : 'width'
+    const full = stacked ? pill.offsetHeight : pill.offsetWidth
+    const circle = stacked ? Math.min(full, pill.offsetWidth) : pill.offsetHeight
+    play(pill, [
+      { [size]: '2px', clipPath: stacked ? 'inset(0 50%)' : 'inset(50% 0)', offset: 0, easing: ease[0] },
+      { [size]: '2px', clipPath: 'inset(0)', offset: 0.14, easing: ease[0] },
+      { [size]: `${full * 0.1}px`, offset: 0.3, easing: ease[1] },
+      { [size]: `${circle}px`, offset: 0.58, easing: ease[2] },
+      { [size]: `${full}px`, clipPath: 'inset(0)', offset: 1 },
+    ])
+    play($('.pill-line'), [{ opacity: 1 }, { opacity: 1, offset: 0.14 }, { opacity: 0, offset: 0.3 }, { opacity: 0 }])
+    play($('.pill-bg'), [{ opacity: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1, offset: 0.78 }, { opacity: 1 }])
+    const settle = { easing: 'cubic-bezier(.2,.8,.2,1)' }
+    play($('.pill-note'), [{ opacity: 0, translate: '0 -30px' }, { opacity: 0, offset: 0.5 }, { opacity: 1, translate: '0 0', offset: 0.86 }, { opacity: 1, translate: '0 0' }], settle)
+    play($('.pill-foot'), [{ opacity: 0, translate: '0 60px' }, { opacity: 0, offset: 0.52 }, { opacity: 1, translate: '0 0', offset: 0.9 }, { opacity: 1, translate: '0 0' }], settle)
+    play($('.pill-rule'), [{ transform: 'scaleX(0)' }, { transform: 'scaleX(0)', offset: 0.4 }, { transform: 'scaleX(1)', offset: 0.95 }, { transform: 'scaleX(1)' }])
+    // A finished fill would pin the pill in px; hand sizing back to CSS so resizing still works.
+    Promise.all(anims.map((a) => a.finished)).then(() => anims.forEach((a) => a.cancel()), () => {})
+    return () => anims.forEach((a) => a.cancel())
+  }, [])
+
+  return (
+    <section className="pill-hero" ref={root}>
+      <svg className="pill-bg" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
+        {Array.from({ length: 12 }, (_, i) => (
+          <path
+            key={i}
+            d={`M-60 ${820 - i * 46} C 320 ${700 - i * 60}, 640 ${980 - i * 70}, 1500 ${360 - i * 52}`}
+            strokeWidth={1.2 + (i % 4) * 0.8}
+            opacity={0.55 + (i % 3) * 0.12}
+          />
+        ))}
+      </svg>
+      <p className="hand pill-note">cumartesi kahvesi nerede içilsin?</p>
+      <h1 className="pill-word">
+        <span>Ortak</span>
+        <span className="pill" aria-hidden="true">
+          <video src={PILL_VIDEO} autoPlay muted loop playsInline preload="auto" />
+          <i className="pill-line" />
+        </span>
+        <span>Nokta</span>
+      </h1>
+      <div className="pill-foot wrap">
+        <p className="dropcap">
+          Biri yürüyerek, biri arabayla geliyor. Ortak Nokta ikisinin de aşağı yukarı aynı sürede vardığı yeri bulur.
+        </p>
+        <span className="pill-rule" aria-hidden="true" />
+        <a className="btn btn-primary" href="#harita">
+          Adil noktayı gör
+        </a>
+      </div>
+    </section>
+  )
+}
+
 function Hero() {
   return (
-    <section className="hero wrap">
+    <section className="hero wrap" id="harita">
       <div className="hero-text">
-        <p className="hand">cumartesi kahvesi nerede içilsin?</p>
-        <h1>
+        <h2>
           Ortada değil, <em>adil</em> buluşun.
-        </h1>
+        </h2>
         <p className="lead">
           Haritanın tam ortası, biri yürüyüp öteki arabayla gelirken hiç de orta sayılmaz. Ortak Nokta herkesin gerçek
           yol süresine bakar ve kimsenin ötekinden fazla yol yapmadığı yeri bulur.
